@@ -33,6 +33,36 @@
   const ICON_USB = svg('<rect x="2.5" y="8" width="19" height="8" rx="4"/><line x1="7" y1="12" x2="17" y2="12"/>');
 
   const deviceListeners = [];
+  // Pages can make the status-bar chips a device selector (settings uses this): the selected chip gets a
+  // white ring and clicking/Enter on a chip calls onSelect(id).
+  const picker = { onSelect: null, selected: null };
+  function renderChips(list) {
+    const selectable = !!picker.onSelect;
+    $devs.innerHTML = list.map(d => {
+      const name = esc(d.device);
+      const sel = selectable && d.id === picker.selected;
+      const attrs = ` data-dev="${esc(d.id || "")}"` + (selectable
+        ? ` role="button" tabindex="0" aria-pressed="${sel}" aria-label="Edit ${name} settings"` : "");
+      const cls = (selectable ? " selectable" : "") + (sel ? " selected" : "");
+      if (d.connected) {
+        const usb = d.transport === "usb";
+        // Charging is shown by the percentage pulsing (last known reading; over USB the level isn't readable live).
+        const pct = d.percent == null ? "–%" : `${d.percent}%`;
+        const level = d.charging
+          ? `<b class="charging" title="Charging" aria-label="Charging, ${pct}">${pct}</b>`
+          : d.percent == null ? "reading…" : `<b>${pct}</b>`;
+        const via = usb ? "USB-C" : "Bluetooth";
+        return `<span class="chip${cls}"${attrs} title="Connected via ${via}"><span class="dot on"></span>${name}`
+             + `<span class="via" aria-label="${via}">${usb ? ICON_USB : ICON_BT}</span>${level}</span>`;
+      }
+      const last = d.percent == null ? "" : ` · last ${d.percent}% ${ago(d.read_at)}`;
+      return `<span class="chip off${cls}"${attrs} title="Not connected"><span class="dot"></span>${name} <b>disconnected</b><small>${last}</small></span>`;
+    }).join("") || '<span class="chip">no Apple devices paired</span>';
+  }
+  function pickFrom(e) {
+    const chip = e.target.closest(".chip.selectable");
+    if (chip && chip.dataset.dev && picker.onSelect) picker.onSelect(chip.dataset.dev);
+  }
   async function refreshDevices() {
     try {
       const r = await fetch("/api/devices");
@@ -40,28 +70,15 @@
       const list = await r.json();
       MC.devices = list; deviceListeners.forEach(fn => { try { fn(list); } catch {} });
       $srv.innerHTML = '<span class="dot on"></span>Companion running';
-      $devs.innerHTML = list.map(d => {
-        const name = esc(d.device);
-        if (d.connected) {
-          const usb = d.transport === "usb";
-          // Charging is shown by the percentage pulsing (last known reading; over USB the level isn't readable live).
-          const pct = d.percent == null ? "–%" : `${d.percent}%`;
-          const level = d.charging
-            ? `<b class="charging" title="Charging" aria-label="Charging, ${pct}">${pct}</b>`
-            : d.percent == null ? "reading…" : `<b>${pct}</b>`;
-          const via = usb ? "USB-C" : "Bluetooth";
-          return `<span class="chip" title="Connected via ${via}"><span class="dot on"></span>${name}`
-               + `<span class="via" aria-label="${via}">${usb ? ICON_USB : ICON_BT}</span>${level}</span>`;
-        }
-        const last = d.percent == null ? "" : ` · last ${d.percent}% ${ago(d.read_at)}`;
-        return `<span class="chip off" title="Not connected"><span class="dot"></span>${name} <b>disconnected</b><small>${last}</small></span>`;
-      }).join("") || '<span class="chip">no Apple devices paired</span>';
+      renderChips(list);
     } catch {
       $srv.innerHTML = '<span class="dot"></span>Server offline';
       $devs.innerHTML = "";
     }
   }
   const $srv = bottom.querySelector("#srv"), $devs = bottom.querySelector("#devs");
+  $devs.addEventListener("click", pickFrom);
+  $devs.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pickFrom(e); } });
   refreshDevices(); setInterval(refreshDevices, 3000);
 
   // One shared event stream per page. Browsers allow only ~6 connections per host, and each
@@ -115,5 +132,7 @@
   });
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeAll(); });
 
-  window.MC = { toast, esc, stream, devices: null, onDevices(fn) { deviceListeners.push(fn); if (MC.devices) fn(MC.devices); } };
+  window.MC = { toast, esc, stream, devices: null, onDevices(fn) { deviceListeners.push(fn); if (MC.devices) fn(MC.devices); },
+    // selectDevices({selected, onSelect}): turn the status-bar chips into a device selector; call again to move the selection.
+    selectDevices(opts) { Object.assign(picker, opts); if (MC.devices) renderChips(MC.devices); } };
 })();

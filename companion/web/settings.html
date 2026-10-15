@@ -79,16 +79,6 @@
   .cards.short { --tile-h: 150px; }
   .pagehead h1 .suffix { color: var(--muted); font-weight: 400; }
   .row .tag.sys { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; white-space: nowrap; font-style: normal; }
-  .devstrip { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px 20px 0; }
-  .devchip { display: flex; align-items: center; gap: 10px; text-align: left; font: inherit; color: var(--muted); background: var(--panel);
-          border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px 8px 13px; margin: 1px; cursor: pointer; min-width: 190px; }
-  .devchip svg { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-  .devchip .nm { display: block; font-weight: 600; font-size: 13px; }
-  .devchip .st { display: block; font-size: 12px; color: var(--muted); }
-  .devchip[aria-checked=true] { border: 2px solid var(--ink); padding: 7px 13px 7px 12px; color: var(--ink); }
-  .devchip[aria-checked=true] .st { color: var(--ink); }
-  .devchip.off:not([aria-checked=true]) { opacity: .6; }
-  .devchip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   .popover .legend span { display: flex; align-items: center; gap: 8px; }
   .popover label.chk { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 </style>
@@ -111,7 +101,6 @@
   </div>
 </div>
 <div class="popover" id="drvpop" role="dialog"><p>Driver setting — applied with “Apply driver settings” (needs admin approval), then power-cycle the trackpad over Bluetooth, or unplug and re-plug it over USB-C.</p></div>
-<div class="devstrip" id="devstrip" role="radiogroup" aria-label="Device"></div>
 <main id="main"></main>
 <script src="/common.js"></script>
 <script>
@@ -325,34 +314,15 @@ async function load() {
   render();
 }
 
-// ---- Device strip: one chip per device, a radiogroup with roving tabindex. ----
+// ---- Device selection: the status-bar device chips (common.js) act as the selector on this page. ----
 let devStatus = {}; // device id -> status item from /api/devices
 const statusItem = id => devStatus[id];
-function statusText(id) {
-  const it = statusItem(id);
-  if (!it) return "Not paired";
-  if (!it.connected) return "Disconnected";
-  const pct = Number.isFinite(it.percent) ? ` · ${it.percent}%` : "";
-  return it.transport === "usb" ? "USB-C" : "Bluetooth" + pct;
-}
-function buildStrip() {
-  $("devstrip").innerHTML = DEVICES.map(d => `<button type="button" class="devchip" role="radio" data-dev="${d.id}">${d.icon}<span><span class="nm">${d.name}</span><span class="st"></span></span></button>`).join("");
-  updateStrip();
-}
-function updateStrip() {
-  DEVICES.forEach((d, i) => {
-    const chip = $("devstrip").children[i];
-    const on = d.id === device;
-    chip.setAttribute("aria-checked", on);
-    if (on) chip.setAttribute("aria-current", "true"); else chip.removeAttribute("aria-current");
-    chip.tabIndex = on ? 0 : -1;
-    chip.classList.toggle("off", !(statusItem(d.id) && statusItem(d.id).connected));
-    chip.querySelector(".st").textContent = statusText(d.id);
-  });
+function updateSelection() {
+  if (window.MC && MC.selectDevices) MC.selectDevices({ selected: device, onSelect: id => selectDevice(id) });
   const cur = DEVICES.find(d => d.id === device);
   $("devtitle").textContent = " / " + cur.name;
 }
-function selectDevice(id, focus) {
+function selectDevice(id) {
   if (!DEVICES.some(d => d.id === id)) return;
   const changed = id !== device;
   device = id;
@@ -360,25 +330,9 @@ function selectDevice(id, focus) {
   const url = new URL(location.href);
   url.searchParams.set("device", id);
   history.replaceState(null, "", url);
-  updateStrip();
-  if (focus) $("devstrip").children[DEVICES.findIndex(d => d.id === id)].focus();
+  updateSelection();
   if (changed) load();
 }
-$("devstrip").addEventListener("click", e => {
-  const chip = e.target.closest("[data-dev]");
-  if (chip) selectDevice(chip.dataset.dev, false);
-});
-$("devstrip").addEventListener("keydown", e => {
-  const i = DEVICES.findIndex(d => d.id === device), n = DEVICES.length;
-  let j = null;
-  if (e.key === "ArrowRight" || e.key === "ArrowDown") j = (i + 1) % n;
-  else if (e.key === "ArrowLeft" || e.key === "ArrowUp") j = (i - 1 + n) % n;
-  else if (e.key === "Home") j = 0;
-  else if (e.key === "End") j = n - 1;
-  if (j === null) return;
-  e.preventDefault();
-  selectDevice(DEVICES[j].id, true);
-});
 function setDevices(list) {
   if (list && !Array.isArray(list)) list = list.devices;
   devStatus = {};
@@ -386,7 +340,6 @@ function setDevices(list) {
     const d = DEVICES.find(x => x.name === (it.device || it.name));
     if (d) devStatus[d.id] = it;
   }
-  updateStrip();
   if (resolveStatus) { resolveStatus(); resolveStatus = null; }
 }
 let resolveStatus = null;
@@ -403,7 +356,6 @@ function watchDevices() {
 }
 
 async function init() {
-  buildStrip();
   const ready = watchDevices();
   let want = new URLSearchParams(location.search).get("device");
   if (!DEVICES.some(d => d.id === want)) { try { want = localStorage.getItem("settingsDevice"); } catch { want = null; } }
@@ -413,7 +365,7 @@ async function init() {
     want = first ? first.id : "trackpad";
   }
   device = want;
-  selectDevice(want, false);
+  selectDevice(want);
   load();
 }
 

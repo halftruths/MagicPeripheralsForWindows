@@ -40,12 +40,12 @@
   @media (prefers-reduced-motion: reduce) { .pct.charging { animation: none; color: var(--muted); font-weight: 500; } }
   .pct.low { color: var(--bad); }
 
-  .bar { width: min(260px, 70%); height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 4px; }
-  .bar i { display: block; height: 100%; background: var(--ink); border-radius: 2px; }
-  .bar.low i { background: var(--bad); }
-  .slide.off .bar { background: transparent; border: 1px solid var(--line); height: 6px; }
-  .slide.off .bar i { background: transparent; border: 1px solid var(--muted); border-radius: 2px; }
-  .slide.off .bar.low i { border-color: var(--bad); }
+  .batt { width: min(260px, 70%); height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 4px; }
+  .batt i { display: block; height: 100%; background: var(--ink); border-radius: 2px; }
+  .batt.low i { background: var(--bad); }
+  .slide.off .batt { background: transparent; border: 1px solid var(--line); height: 6px; }
+  .slide.off .batt i { background: transparent; border: 1px solid var(--muted); border-radius: 2px; }
+  .slide.off .batt.low i { border-color: var(--bad); }
 
   .dtog { margin-top: 10px; padding: 2px 8px; border: 0; background: none; color: var(--muted); font-size: 12px; }
   .dtog:hover, .dtog[aria-expanded=true] { color: var(--ink); }
@@ -116,7 +116,7 @@ function buildSlide(d, i, n) {
   el.setAttribute("aria-label", `${i + 1} of ${n}`);
   el.innerHTML = `<svg class="art ${esc(d.id)}" aria-hidden="true"><use href="/devices.svg#dev-${esc(d.id)}"/></svg>`
     + `<h2 class="name"></h2><p class="conn"></p>`
-    + `<div class="level"><span class="pct"></span><span class="sub"></span></div><div class="bar"><i></i></div>`
+    + `<div class="level"><span class="pct"></span><span class="sub"></span></div><div class="batt"><i></i></div>`
     + `<button class="dtog" aria-expanded="false">Details</button>`
     + `<dl class="details" hidden><dt>Address</dt><dd data-k="address"></dd><dt>Serial</dt><dd data-k="serial"></dd><dt>Firmware</dt><dd data-k="firmware"></dd></dl>`;
   const btn = el.querySelector(".dtog"), dl = el.querySelector(".details");
@@ -145,7 +145,7 @@ function fill(el, d) {
   pct.setAttribute("aria-label", known ? `${d.percent} percent${!off && d.charging ? ", charging" : ""}` : "battery level unknown");
   sub.textContent = off ? (known && d.read_at ? `· ${ago(d.read_at)}` : "")
     : usb ? (known ? "charging · last reading" : "charging") : known ? "" : "reading…";
-  const bar = el.querySelector(".bar");
+  const bar = el.querySelector(".batt");
   bar.classList.toggle("low", low);
   bar.firstElementChild.style.width = known ? `${Math.max(0, Math.min(100, d.percent))}%` : "0";
   for (const dd of el.querySelectorAll("[data-k]")) dd.textContent = d[dd.dataset.k] || "–";
