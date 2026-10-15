@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <!-- Original line illustrations. Drawn with currentColor; the page sets stroke width, dashes and opacity. -->
+  <symbol id="dev-trackpad" viewBox="0 0 220 150">
+    <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="10" y="14" width="200" height="118" rx="12"/>
+      <path d="M10 124v2a12 12 0 0 0 12 12h176a12 12 0 0 0 12-12v-2" opacity=".55"/>
+      <rect x="20" y="24" width="180" height="98" rx="7" opacity=".4"/>
+    </g>
+  </symbol>
+  <symbol id="dev-keyboard" viewBox="0 0 280 110">
+    <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="8" y="14" width="264" height="80" rx="9"/>
+      <path d="M8 88v3a9 9 0 0 0 9 9h246a9 9 0 0 0 9-9v-3" opacity=".55"/>
+      <!-- function row -->
+      <path d="M20 26h12M36 26h12M52 26h12M68 26h12M84 26h12M100 26h12M116 26h12M132 26h12M148 26h12M164 26h12M180 26h12M196 26h12M212 26h12M228 26h12M244 26h16" opacity=".6"/>
+      <!-- number, letter and home rows -->
+      <path d="M20 40h14M38 40h14M56 40h14M74 40h14M92 40h14M110 40h14M128 40h14M146 40h14M164 40h14M182 40h14M200 40h14M218 40h14M236 40h24"/>
+      <path d="M20 52h22M46 52h14M64 52h14M82 52h14M100 52h14M118 52h14M136 52h14M154 52h14M172 52h14M190 52h14M208 52h14M226 52h34"/>
+      <path d="M20 64h26M50 64h14M68 64h14M86 64h14M104 64h14M122 64h14M140 64h14M158 64h14M176 64h14M194 64h14M212 64h48"/>
+      <!-- bottom row with space bar -->
+      <path d="M20 76h12M36 76h12M52 76h12M68 76h108M180 76h12M196 76h12M212 76h12M228 76h32"/>
+    </g>
+  </symbol>
+</svg>

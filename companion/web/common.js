@@ -2,12 +2,14 @@
 // transient toast (also used for gesture actions) and dropdown wiring.
 (() => {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const path = location.pathname;
-  const isSettings = path.endsWith("/settings.html");
+  const NAV = [["/", "Home"], ["/live", "Live"], ["/settings", "Settings"], ["/drivers", "Drivers"]];
+  const ALIASES = { "/live.html": "/live", "/settings.html": "/settings", "/index.html": "/live", "/home.html": "/" };
+  const path = ALIASES[location.pathname] || location.pathname;
 
   const top = document.createElement("div");
   top.className = "bar"; top.id = "topbar";
-  top.innerHTML = `<h1>Magic Companion</h1><nav><a href="/" class="${isSettings ? "" : "on"}">Live view</a><a href="/settings.html" class="${isSettings ? "on" : ""}">Settings</a></nav>`;
+  top.innerHTML = `<h1>Magic Companion</h1><nav>${NAV.map(([href, label]) =>
+    `<a href="${href}"${href === path ? ' class="on" aria-current="page"' : ""}>${label}</a>`).join("")}</nav>`;
   const bottom = document.createElement("div");
   bottom.className = "bar"; bottom.id = "statusbar";
   bottom.innerHTML = `<div class="srv" id="srv"><span class="dot"></span>Connecting…</div><div class="devs" id="devs"></div>`;
@@ -30,11 +32,13 @@
   const ICON_BT = svg('<polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/>');
   const ICON_USB = svg('<rect x="2.5" y="8" width="19" height="8" rx="4"/><line x1="7" y1="12" x2="17" y2="12"/>');
 
+  const deviceListeners = [];
   async function refreshDevices() {
     try {
       const r = await fetch("/api/devices");
       if (!r.ok) throw new Error(r.status);
       const list = await r.json();
+      MC.devices = list; deviceListeners.forEach(fn => { try { fn(list); } catch {} });
       $srv.innerHTML = '<span class="dot on"></span>Companion running';
       $devs.innerHTML = list.map(d => {
         const name = esc(d.device);
@@ -111,5 +115,5 @@
   });
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeAll(); });
 
-  window.MC = { toast, esc, stream };
+  window.MC = { toast, esc, stream, devices: null, onDevices(fn) { deviceListeners.push(fn); if (MC.devices) fn(MC.devices); } };
 })();
