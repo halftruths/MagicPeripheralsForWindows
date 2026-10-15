@@ -6,6 +6,8 @@
 <title>Magic Companion</title>
 <link rel="stylesheet" href="/common.css">
 <style>
+  :root { --touch: #000; --palm: #d9a400; --hover: #6e6e73; }
+  @media (prefers-color-scheme: dark) { :root { --touch: #fff; --palm: #f5c518; --hover: #9a9aa2; } }
   html, body { overflow: hidden; overscroll-behavior: none; }
   body { height: 100dvh; min-height: 0; display: flex; flex-direction: column; }
   .pagehead { flex: none; padding-top: 10px; padding-bottom: 0; }
@@ -36,13 +38,15 @@
   .stats span:nth-child(odd) { color: var(--muted); }
   .stats .bad { color: var(--bad); font-weight: 600; }
   input[type=text] { width: 100%; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
-  button.primary { background: var(--touch); border-color: var(--touch); color: #fff; }
+  button.primary { background: var(--ink); border-color: var(--ink); color: var(--bg); font-weight: 600; }
   button.rec { background: var(--bad); border-color: var(--bad); color: #fff; }
   .row { display: flex; gap: 8px; margin-top: 8px; }
   ul { list-style: none; padding: 0; margin: 10px 0 0; font-size: 12px; color: var(--muted); overflow: auto; overscroll-behavior: contain; flex: 1 1 auto; min-height: 40px; }
   li { padding: 3px 0; border-top: 1px solid var(--line); }
   .toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
-  .toggle input { width: 16px; height: 16px; accent-color: var(--touch); }
+  .toggle input { width: 16px; height: 16px; accent-color: var(--ink); }
+  #conn .dot:not(.on) { background: var(--muted); opacity: .6; }
+  .legend svg { width: 16px; height: 12px; margin-right: 6px; vertical-align: -2px; overflow: visible; flex: none; }
   #conn { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
   .preview { position: relative; }
   .preview .off { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center;
@@ -57,28 +61,28 @@
   <span id="conn"><span class="dot"></span>previews off</span>
   <div class="rel keygroup">
     <div class="legend inline" aria-label="Trackpad visualizer legend">
-      <span><i style="background:var(--touch)"></i>touch</span>
-      <span><i style="background:var(--palm)"></i>palm</span>
-      <span><i style="background:var(--hover)"></i>hover</span>
-      <span><i style="background:var(--bad)"></i>frozen</span>
+      <span><svg viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4.5" fill="var(--touch)"/></svg>touch</span>
+      <span><svg viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4.5" fill="var(--palm)"/></svg>palm</span>
+      <span><svg viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4.5" fill="none" stroke="var(--hover)" stroke-width="1.5" stroke-dasharray="2.5 2"/><circle cx="8" cy="6" r="1" fill="var(--hover)"/></svg>hover</span>
+      <span><svg viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4.5" fill="none" stroke="var(--bad)" stroke-width="2"/></svg>frozen</span>
     </div>
     <button class="chevron" data-pop="morepop" aria-label="More options" aria-expanded="false" aria-haspopup="true"></button>
     <div class="popover" id="morepop">
       <h3>Trackpad</h3>
       <div class="legend">
-        <span><i style="background:var(--touch)"></i>touching</span>
-        <span><i style="background:var(--palm)"></i>low confidence (palm)</span>
-        <span><i style="background:var(--hover)"></i>hovering (tip off)</span>
-        <span><i style="background:var(--bad)"></i>frozen position</span>
+        <span><svg viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4.5" fill="var(--touch)"/></svg>touching</span>
+        <span><svg viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4.5" fill="var(--palm)"/></svg>low confidence (palm)</span>
+        <span><svg viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4.5" fill="none" stroke="var(--hover)" stroke-width="1.5" stroke-dasharray="2.5 2"/><circle cx="8" cy="6" r="1" fill="var(--hover)"/></svg>hovering (tip off)</span>
+        <span><svg viewBox="0 0 16 12" aria-hidden="true"><circle cx="8" cy="6" r="4.5" fill="none" stroke="var(--bad)" stroke-width="2"/></svg>frozen position</span>
       </div>
       <h3>Scroll timeline</h3>
       <div class="legend">
-        <span><i style="background:var(--touch)"></i>finger motion Y</span>
-        <span><i style="background:var(--h)"></i>finger motion X</span>
-        <span><i style="background:var(--touch);opacity:.45"></i>vertical wheel events</span>
-        <span><i style="background:var(--h);opacity:.45"></i>horizontal wheel events</span>
+        <span><svg viewBox="0 0 16 12" aria-hidden="true"><line x1="0" y1="6" x2="16" y2="6" stroke="var(--touch)" stroke-width="1.8"/></svg>finger motion Y (solid)</span>
+        <span><svg viewBox="0 0 16 12" aria-hidden="true"><line x1="0" y1="6" x2="16" y2="6" stroke="var(--touch)" stroke-width="1.8" stroke-dasharray="4 3"/></svg>finger motion X (dashed)</span>
+        <span><svg viewBox="0 0 16 12" aria-hidden="true"><rect x="6" y="1" width="4" height="10" fill="var(--touch)" opacity=".45"/></svg>vertical wheel events (filled)</span>
+        <span><svg viewBox="0 0 16 12" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="9" fill="none" stroke="var(--touch)" stroke-width="1.2" opacity=".8"/></svg>horizontal wheel events (hollow)</span>
       </div>
-      <p class="hint">Lines: two-finger centroid speed. Bars: wheel events Windows emitted. A diagonal swipe should show both bar colors.</p>
+      <p class="hint">Lines: two-finger centroid speed. Bars: wheel events Windows emitted. A diagonal swipe should show both bar types.</p>
     </div>
   </div>
 </div>
@@ -205,10 +209,13 @@ function drawPad() {
     const rx = Math.max(6, c.w * sx / 2), ry = Math.max(6, c.h * sy / 2);
     const color = !c.tip ? css("--hover") : !c.conf ? css("--palm") : css("--touch");
     ctx.beginPath(); ctx.ellipse(c.x * sx, c.y * sy, rx, ry, 0, 0, Math.PI * 2);
-    if (c.tip) { ctx.fillStyle = color; ctx.globalAlpha = .75; ctx.fill(); ctx.globalAlpha = 1; }
-    else { ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke(); }
-    if (frozenIds.has(c.id)) { ctx.strokeStyle = css("--bad"); ctx.lineWidth = 3; ctx.stroke(); }
-    ctx.fillStyle = css("--ink"); ctx.font = "11px system-ui";
+    if (c.tip) { ctx.fillStyle = color; ctx.globalAlpha = .9; ctx.fill(); ctx.globalAlpha = 1; }
+    else {   // hover: dashed hollow ring plus a small center dot, readable without color
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(c.x * sx, c.y * sy, 2, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+    }
+    if (frozenIds.has(c.id)) { ctx.beginPath(); ctx.ellipse(c.x * sx, c.y * sy, rx, ry, 0, 0, Math.PI * 2); ctx.strokeStyle = css("--bad"); ctx.lineWidth = 3; ctx.stroke(); }
+    ctx.fillStyle = css("--muted"); ctx.font = "11px system-ui";
     ctx.fillText(`#${c.id} p${c.p} s${c.state} f${c.finger}`, c.x * sx + rx + 4, c.y * sy + 4);
   }
 }
@@ -222,15 +229,16 @@ function drawTimeline() {
   ctx.strokeStyle = css("--line"); ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(W, mid); ctx.stroke();
   const tx = t => (t - t0) / span * W;
   for (const [t, axis, d] of wheels) {
-    ctx.fillStyle = axis === "v" ? css("--touch") : css("--h"); ctx.globalAlpha = .45;
     const hgt = Math.max(-mid, Math.min(mid, d / 120 * 30));
-    ctx.fillRect(tx(t) - (axis === "v" ? 2 : 0), mid - hgt, 2, hgt); ctx.globalAlpha = 1;
+    if (axis === "v") { ctx.fillStyle = css("--touch"); ctx.globalAlpha = .45; ctx.fillRect(tx(t) - 1.5, mid - hgt, 3, hgt); }   // vertical: filled
+    else { ctx.strokeStyle = css("--touch"); ctx.globalAlpha = .8; ctx.lineWidth = 1; ctx.strokeRect(tx(t) - 2.5, mid - hgt, 5, hgt); }   // horizontal: hollow
+    ctx.globalAlpha = 1;
   }
   const scale = mid / 6000;
-  for (const [idx, color] of [[2, css("--touch")], [1, css("--h")]]) {
-    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+  for (const [idx, dash] of [[2, []], [1, [6, 4]]]) {   // Y solid, X dashed
+    ctx.beginPath(); ctx.strokeStyle = css("--touch"); ctx.lineWidth = 1.5; ctx.setLineDash(dash);
     motion.forEach((m, i) => { const y = mid - Math.max(-mid, Math.min(mid, m[idx] * scale)); i ? ctx.lineTo(tx(m[0]), y) : ctx.moveTo(tx(m[0]), y); });
-    ctx.stroke();
+    ctx.stroke(); ctx.setLineDash([]);
   }
 }
 
