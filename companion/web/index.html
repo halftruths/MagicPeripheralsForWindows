@@ -262,21 +262,25 @@ function drawStats() {
   $("wheels").textContent = `${counters.v} / ${counters.h}`;
 }
 
-let es = null, raf = null;
+let previewing = false, raf = null;
 function loop() { drawPad(); drawTimeline(); drawStats(); raf = requestAnimationFrame(loop); }
 
-// Previews off: no event stream (so the server can drop its system-wide wheel hook) and no redraw loop.
+// Frames and wheel events arrive on the page's single shared stream (common.js).
+MC.stream.onEvent(e => { if (!previewing) return; e.type === "frame" ? onFrame(e) : e.type === "wheel" && onWheel(e); });
+MC.stream.onStatus(ok => { if (previewing) $("conn").innerHTML = ok ? '<span class="dot on"></span>live' : '<span class="dot"></span>reconnecting…'; });
+
+// Previews off: the shared stream carries only gesture actions (so the server can drop its system-wide
+// wheel hook) and the redraw loop stops.
 function setPreviews(on) {
   document.body.classList.toggle("no-preview", !on);
   try { localStorage.setItem("previews", on ? "1" : "0"); } catch {}
-  if (on && !es) {
-    es = new EventSource("/events");
-    es.onopen = () => $("conn").innerHTML = '<span class="dot on"></span>live';
-    es.onerror = () => $("conn").innerHTML = '<span class="dot"></span>reconnecting…';
-    es.onmessage = m => { const e = JSON.parse(m.data); e.type === "frame" ? onFrame(e) : e.type === "wheel" && onWheel(e); };
+  if (on && !previewing) {
+    previewing = true;
+    MC.stream.setKinds(["frame", "wheel"]);
     raf = requestAnimationFrame(loop);
-  } else if (!on && es) {
-    es.close(); es = null;
+  } else if (!on && previewing) {
+    previewing = false;
+    MC.stream.setKinds([]);
     cancelAnimationFrame(raf); raf = null;
     latest = null; frameTimes = []; drawStats();
     $("conn").innerHTML = '<span class="dot"></span>previews off';

@@ -60,14 +60,36 @@
   const $srv = bottom.querySelector("#srv"), $devs = bottom.querySelector("#devs");
   refreshDevices(); setInterval(refreshDevices, 3000);
 
-  // Gesture action toasts. The "only=action" stream does not enable the server's wheel hook.
-  try {
-    const es = new EventSource("/events?only=action");
-    es.onmessage = m => {
-      const e = JSON.parse(m.data);
-      if (e.type === "action") toast(`${e.name}${e.detail ? " → " + e.detail : ""}`, 1800);
-    };
-  } catch {}
+  // One shared event stream per page. Browsers allow only ~6 connections per host, and each
+  // EventSource holds one open, so pages must never open their own. Gesture actions are always
+  // subscribed (toasts); pages widen the stream with MC.stream.setKinds (e.g. frames, wheel).
+  // An "only=action" stream does not enable the server's system-wide wheel hook.
+  const stream = {
+    kinds: ["action"], es: null, listeners: [], statusListeners: [],
+    open() {
+      if (this.es) this.es.close();
+      const all = ["action", "frame", "wheel"].every(k => this.kinds.includes(k));
+      this.es = new EventSource(all ? "/events" : `/events?only=${this.kinds.join(",")}`);
+      this.es.onopen = () => this.statusListeners.forEach(fn => fn(true));
+      this.es.onerror = () => this.statusListeners.forEach(fn => fn(false));
+      this.es.onmessage = m => {
+        const e = JSON.parse(m.data);
+        if (e.type === "action") toast(`${e.name}${e.detail ? " → " + e.detail : ""}`, 1800);
+        this.listeners.forEach(fn => fn(e));
+      };
+    },
+    setKinds(kinds) {
+      const next = ["action", ...kinds.filter(k => k !== "action")];
+      if (next.join() === this.kinds.join() && this.es) return;
+      this.kinds = next;
+      this.open();
+    },
+    onEvent(fn) { this.listeners.push(fn); },
+    onStatus(fn) { this.statusListeners.push(fn); },
+  };
+  try { stream.open(); } catch {}
+  // Release the connection immediately on navigation/reload instead of waiting for the server to notice.
+  window.addEventListener("pagehide", () => { if (stream.es) stream.es.close(); });
 
   // Dropdowns: <button class="chevron" data-pop="id"> toggles <div class="popover" id="id">.
   function closeAll(except) {
@@ -89,5 +111,5 @@
   });
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeAll(); });
 
-  window.MC = { toast, esc };
+  window.MC = { toast, esc, stream };
 })();

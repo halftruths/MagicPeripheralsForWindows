@@ -217,7 +217,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             while True:
                 try:
-                    lines = [q.get(timeout=15)]
+                    lines = [q.get(timeout=5)]
                 except queue.Empty:
                     self.wfile.write(b": ping\n\n")  # keepalive; also detects closed tabs
                     self.wfile.flush()
