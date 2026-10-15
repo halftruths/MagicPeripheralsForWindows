@@ -17,9 +17,11 @@ STORE = Path(__file__).resolve().parent / "settings.local.json"
 DRIVER_KEY = r"SYSTEM\CurrentControlSet\Services\AmtPtpHidFilter\Parameters"
 
 
-def S(key, group, label, kind, default, backend="companion", unit="", min=None, max=None, step=None, choices=None, help=""):
+def S(key, group, label, kind, default, backend="companion", unit="", min=None, max=None, step=None, choices=None, help="",
+      depends=None):
+    """depends: (other_key, allowed_values) - the setting only has an effect while other_key is one of allowed_values."""
     return {"key": key, "group": group, "label": label, "kind": kind, "default": default, "backend": backend,
-            "unit": unit, "min": min, "max": max, "step": step, "choices": choices, "help": help}
+            "unit": unit, "min": min, "max": max, "step": step, "choices": choices, "help": help, "depends": depends}
 
 
 SCHEMA = [
@@ -28,8 +30,6 @@ SCHEMA = [
     S("win.tapAndDragEnabled", "1 finger", "Double tap to drag", "bool", True, "windows"),
     S("win.sensitivityLevel", "1 finger", "Accidental-touch filtering", "int", 2, "windows", "level", 0, 4, 1,
       help="Windows touchpad sensitivity: 0 = most sensitive (never ignores touches) ... 4 = least sensitive."),
-    S("driver.ButtonDisabled", "1 finger", "Ignore physical click", "bool", False, "driver",
-      help="Disables the force-touch click and haptics entirely."),
 
     # 2 fingers
     S("win.twoFingerTapEnabled", "2 fingers", "Tap to right click", "bool", True, "windows"),
@@ -37,38 +37,58 @@ SCHEMA = [
     S("scroll.mode", "2 fingers", "Scrolling handled by", "choice", "windows", choices=[
         ["windows", "Windows (native)"], ["companion", "Companion engine"], ["off", "Off"]],
       help="Companion engine: free diagonal scrolling with the tuning below. Windows: native scrolling (apps decide axis locking)."),
-    S("win.scrollDirectionReversed", "2 fingers", "Windows scrolling: reverse direction", "bool", False, "windows"),
-    S("scroll.natural", "2 fingers", "Content follows fingers (natural)", "bool", True),
-    S("scroll.horizontal", "2 fingers", "Horizontal scrolling", "bool", True),
-    S("scroll.axisLock", "2 fingers", "Axis lock", "choice", "dominant", choices=[
-        ["free", "Free (any direction)"], ["dominant", "Lock straight swipes, free diagonals"], ["always", "Always lock to one axis"]]),
-    S("scroll.lockRatio", "2 fingers", "Lock when dominant axis exceeds", "float", 2.5, unit="x the other", min=1.0, max=10.0, step=0.1),
-    S("scroll.speed", "2 fingers", "Scroll speed", "float", 12.0, unit="wheel units/mm", min=1.0, max=60.0, step=0.5,
-      help="120 wheel units = one mouse-wheel notch. Browsers scroll about 100 px per 120 units at 100% zoom."),
-    S("scroll.acceleration", "2 fingers", "Acceleration", "float", 0.6, unit="extra gain per 100 mm/s", min=0.0, max=5.0, step=0.1),
-    S("scroll.startDistance", "2 fingers", "Start threshold", "float", 1.5, unit="mm", min=0.0, max=10.0, step=0.1),
-    S("scroll.minDelta", "2 fingers", "Smallest wheel event", "int", 6, unit="wheel units", min=1, max=120, step=1,
-      help="Deltas are batched up to this size. 120 makes every app scroll in whole notches."),
-    S("scroll.inertia", "2 fingers", "Inertia after lift", "bool", True),
-    S("scroll.friction", "2 fingers", "Inertia friction", "float", 4.0, unit="1/s", min=0.5, max=20.0, step=0.1,
-      help="Speed decays by e^(-friction x seconds). Higher stops sooner."),
-    S("scroll.inertiaMinSpeed", "2 fingers", "Inertia start/stop speed", "float", 40.0, unit="mm/s", min=5.0, max=300.0, step=5.0),
+    S("win.scrollDirectionReversed", "2 fingers", "Windows scrolling: reverse direction", "bool", False, "windows",
+      depends=("scroll.mode", ["windows"])),
+    S("scroll.natural", "Scrolling (companion engine)", "Content follows fingers (natural)", "bool", True,
+      depends=("scroll.mode", ["companion"])),
+    S("scroll.horizontal", "Scrolling (companion engine)", "Horizontal scrolling", "bool", True,
+      depends=("scroll.mode", ["companion"])),
+    S("scroll.axisLock", "Scrolling (companion engine)", "Axis lock", "choice", "dominant", choices=[
+        ["free", "Free (any direction)"], ["dominant", "Lock straight swipes, free diagonals"], ["always", "Always lock to one axis"]],
+      depends=("scroll.mode", ["companion"])),
+    S("scroll.lockRatio", "Scrolling (companion engine)", "Lock when dominant axis exceeds", "float", 2.5, unit="x the other", min=1.0, max=10.0, step=0.1,
+      depends=("scroll.axisLock", ["dominant"])),
+    S("scroll.speed", "Scrolling (companion engine)", "Scroll speed", "float", 12.0, unit="wheel units/mm", min=1.0, max=60.0, step=0.5,
+      help="120 wheel units = one mouse-wheel notch. Browsers scroll about 100 px per 120 units at 100% zoom.",
+      depends=("scroll.mode", ["companion"])),
+    S("scroll.acceleration", "Scrolling (companion engine)", "Acceleration", "float", 0.6, unit="extra gain per 100 mm/s", min=0.0, max=5.0, step=0.1,
+      depends=("scroll.mode", ["companion"])),
+    S("scroll.startDistance", "Scrolling (companion engine)", "Start threshold", "float", 1.5, unit="mm", min=0.0, max=10.0, step=0.1,
+      depends=("scroll.mode", ["companion"])),
+    S("scroll.minDelta", "Scrolling (companion engine)", "Smallest wheel event", "int", 6, unit="wheel units", min=1, max=120, step=1,
+      help="Deltas are batched up to this size. 120 makes every app scroll in whole notches.",
+      depends=("scroll.mode", ["companion"])),
+    S("scroll.inertia", "Scrolling (companion engine)", "Inertia after lift", "bool", True,
+      depends=("scroll.mode", ["companion"])),
+    S("scroll.friction", "Scrolling (companion engine)", "Inertia friction", "float", 4.0, unit="1/s", min=0.5, max=20.0, step=0.1,
+      help="Speed decays by e^(-friction x seconds). Higher stops sooner.",
+      depends=("scroll.inertia", [True])),
+    S("scroll.inertiaMinSpeed", "Scrolling (companion engine)", "Inertia start/stop speed", "float", 40.0, unit="mm/s", min=5.0, max=300.0, step=5.0,
+      depends=("scroll.inertia", [True])),
     S("nav.flick", "2 fingers", "Fast horizontal swipe = back/forward", "bool", False),
-    S("nav.flickSwap", "2 fingers", "Swap back/forward direction", "bool", False),
-    S("nav.flickSpeed", "2 fingers", "Swipe speed needed", "float", 250.0, unit="mm/s", min=50.0, max=1000.0, step=10.0),
-    S("nav.flickDistance", "2 fingers", "Swipe distance needed", "float", 15.0, unit="mm", min=3.0, max=80.0, step=1.0),
+    S("nav.flickSwap", "2 fingers", "Swap back/forward direction", "bool", False,
+      depends=("nav.flick", [True])),
+    S("nav.flickSpeed", "2 fingers", "Swipe speed needed", "float", 250.0, unit="mm/s", min=50.0, max=1000.0, step=10.0,
+      depends=("nav.flick", [True])),
+    S("nav.flickDistance", "2 fingers", "Swipe distance needed", "float", 15.0, unit="mm", min=3.0, max=80.0, step=1.0,
+      depends=("nav.flick", [True])),
     S("win.zoomEnabled", "2 fingers", "Pinch to zoom", "bool", True, "windows"),
 
     # 3 fingers
     S("three.tap", "3 fingers", "Tap", "choice", "middle", choices=[["off", "Nothing"], ["middle", "Middle click"]]),
     S("three.drag", "3 fingers", "Three-finger drag", "bool", True),
     S("three.dragButton", "3 fingers", "Drag with button", "choice", "left", choices=[
-        ["left", "Primary"], ["middle", "Middle"], ["right", "Secondary"]]),
-    S("three.dragGain", "3 fingers", "Drag pointer speed", "float", 12.0, unit="px/mm", min=1.0, max=60.0, step=0.5),
-    S("three.dragStart", "3 fingers", "Drag start threshold", "float", 3.0, unit="mm", min=0.0, max=15.0, step=0.1),
-    S("three.dropOnLift", "3 fingers", "Drop when a finger is lifted", "bool", False),
+        ["left", "Primary"], ["middle", "Middle"], ["right", "Secondary"]],
+      depends=("three.drag", [True])),
+    S("three.dragGain", "3 fingers", "Drag pointer speed", "float", 12.0, unit="px/mm", min=1.0, max=60.0, step=0.5,
+      depends=("three.drag", [True])),
+    S("three.dragStart", "3 fingers", "Drag start threshold", "float", 3.0, unit="mm", min=0.0, max=15.0, step=0.1,
+      depends=("three.drag", [True])),
+    S("three.dropOnLift", "3 fingers", "Drop when a finger is lifted", "bool", False,
+      depends=("three.drag", [True])),
     S("three.dragLock", "3 fingers", "Drag lock after lifting", "int", 0, unit="ms (0 = off)", min=0, max=5000, step=50,
-      help="Keeps the button held after lifting; put 3 fingers back to keep dragging. A 1-2 finger tap ends it early."),
+      help="Keeps the button held after lifting; put 3 fingers back to keep dragging. A 1-2 finger tap ends it early.",
+      depends=("three.drag", [True])),
 
     # 4 fingers
     S("four.tap", "4 fingers", "Tap", "choice", "notifications", choices=[
@@ -76,7 +96,8 @@ SCHEMA = [
         ["search", "Search (Win+S)"], ["task_view", "Task View (Win+Tab)"], ["play_pause", "Play/pause"]]),
     S("four.swipeSide", "4 fingers", "Swipe left/right", "choice", "desktops", choices=[
         ["off", "Nothing"], ["desktops", "Switch virtual desktop"], ["apps", "Switch app (Alt+Tab)"]]),
-    S("four.swipeSideSwap", "4 fingers", "Swap left/right direction", "bool", False),
+    S("four.swipeSideSwap", "4 fingers", "Swap left/right direction", "bool", False,
+      depends=("four.swipeSide", ["desktops", "apps"])),
     S("four.swipeUp", "4 fingers", "Swipe up", "choice", "task_view", choices=[["off", "Nothing"], ["task_view", "Task View"]]),
     S("four.swipeDown", "4 fingers", "Swipe down", "choice", "show_desktop", choices=[["off", "Nothing"], ["show_desktop", "Show desktop"]]),
     S("four.swipeDistance", "4 fingers", "Swipe distance needed", "float", 20.0, unit="mm", min=5.0, max=80.0, step=1.0),
@@ -93,6 +114,8 @@ SCHEMA = [
     S("win.allowActiveWhenMousePresent", "Pointer", "Keep touchpad on when a mouse is connected", "bool", True, "windows"),
 
     # Click and driver
+    S("driver.ButtonDisabled", "Click (driver)", "Ignore physical click", "bool", False, "driver",
+      help="Disables the force-touch click and haptics entirely."),
     S("driver.clickForce", "Click (driver)", "Click force threshold", "int", 30, "driver", "raw (light 21, medium 23, firm 30)", 0, 255, 1),
     S("driver.releaseForce", "Click (driver)", "Release force threshold", "int", 24, "driver", "raw (light 16, medium 20, firm 24)", 0, 255, 1),
     S("driver.clickHaptic", "Click (driver)", "Click haptic strength", "int", 8, "driver", "raw (0 = silent; light 4, medium 6, firm 8)", 0, 255, 1),

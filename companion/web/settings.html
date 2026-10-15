@@ -25,16 +25,25 @@
   .badge { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 1px 6px; border-radius: 4px;
            border: 1px solid currentColor; white-space: nowrap; }
   .badge.windows { color: var(--b-windows); } .badge.companion { color: var(--b-companion); } .badge.driver { color: var(--b-driver); }
-  main { padding: 16px 20px 40px; display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; align-items: start; }
-  @media (max-width: 440px) { main { grid-template-columns: 1fr; } }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  /* In rows the backend is a colored dot (legend in the header) so labels stay on one line. */
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+  .dot.windows { background: var(--b-windows); } .dot.companion { background: var(--b-companion); } .dot.driver { background: var(--b-driver); }
+  .top { padding: 16px 20px 0; display: grid; gap: 8px; }
+  /* Masonry: cards flow down columns and fill gaps instead of sitting in fixed-height rows. */
+  main { padding: 16px 20px 40px; columns: 360px; column-gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+          break-inside: avoid; margin: 0 0 16px; }
+  .card .sub { font-size: 12px; color: var(--muted); margin: -4px 0 6px; }
   .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 2px 0 8px; font-weight: 600; }
   .row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
   .row:first-of-type { border-top: 0; }
   .row label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .row .name { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .row .name { display: flex; gap: 7px; align-items: baseline; }
+  .row .name .dot { transform: translateY(-1px); }
   .row .help { font-size: 12px; color: var(--muted); }
   .row.changed .name::after { content: "•"; color: var(--accent); }
+  .row.inactive label, .row.inactive .ctl { opacity: .4; }
+  body.hide-help .help { display: none; }
   .row.pending { background: color-mix(in srgb, var(--b-driver) 8%, transparent); }
   .ctl { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
   .unit { font-size: 12px; color: var(--muted); max-width: 150px; text-align: right; }
@@ -47,9 +56,9 @@
   button.primary { background: var(--b-driver); border-color: var(--b-driver); color: #fff; }
   button:disabled { opacity: .45; cursor: default; }
   .note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
-  .banner { grid-column: 1 / -1; font-size: 13px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
+  .banner { font-size: 13px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
   .banner b { font-weight: 600; }
-  #feed { grid-column: 1 / -1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 18px; }
+  #feed { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 18px; }
   #feed span { color: var(--ink); }
   #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
            padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
@@ -60,20 +69,39 @@
 <header>
   <h1>Magic Companion</h1>
   <nav><a href="/">Live view</a><a href="/settings.html" class="on">Settings</a></nav>
-  <div class="legend">
-    <span><span class="badge windows">windows</span> applies instantly</span>
-    <span><span class="badge companion">companion</span> applies instantly</span>
-    <span><span class="badge driver">driver</span> UAC + power-cycle</span>
+  <label class="legend" style="margin-left:auto"><input type="checkbox" id="showHelp"> Show descriptions</label>
+  <div class="legend" style="margin-left:0">
+    <span><span class="dot windows"></span> Windows, instant</span>
+    <span><span class="dot companion"></span> Companion, instant</span>
+    <span><span class="dot driver"></span> Driver, UAC + power-cycle</span>
   </div>
 </header>
-<main id="main">
+<div class="top">
   <div class="banner" id="banner">Loading…</div>
   <div id="feed">Last gesture: <span id="lastAction">none yet</span></div>
-</main>
+</div>
+<main id="main"></main>
 <div id="toast"></div>
 <script>
 const $ = id => document.getElementById(id);
 let schema = [], values = {}, pendingDriver = {};
+const GROUP_ORDER = ["1 finger", "2 fingers", "Scrolling (companion engine)", "3 fingers", "4 fingers", "Taps", "Pointer", "Click (driver)"];
+const GROUP_NOTES = { "Scrolling (companion engine)": "Used when 2-finger scrolling is handled by the companion engine." };
+const current = key => key in pendingDriver ? pendingDriver[key] : values[key];
+// A setting is active if its dependency (and that dependency's own dependency) holds.
+function active(spec) {
+  if (!spec.depends) return true;
+  const [key, allowed] = spec.depends;
+  const parent = schema.find(s => s.key === key);
+  return allowed.includes(current(key)) && active(parent);
+}
+const showHelp = (() => { try { return localStorage.getItem("showHelp") === "1"; } catch { return false; } })();
+$("showHelp").checked = showHelp;
+document.body.classList.toggle("hide-help", !showHelp);
+$("showHelp").onchange = e => {
+  document.body.classList.toggle("hide-help", !e.target.checked);
+  try { localStorage.setItem("showHelp", e.target.checked ? "1" : "0"); } catch {}
+};
 
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200); }
 
@@ -88,17 +116,18 @@ function control(spec) {
 }
 
 function render() {
-  const groups = [...new Set(schema.map(s => s.group))];
+  const groups = [...new Set(schema.map(s => s.group))].sort((a, b) => GROUP_ORDER.indexOf(a) - GROUP_ORDER.indexOf(b));
   const main = $("main");
-  main.querySelectorAll(".card").forEach(c => c.remove());
+  main.innerHTML = "";
   for (const g of groups) {
     const card = document.createElement("section");
     card.className = "card";
     const rows = schema.filter(s => s.group === g).map(s => {
       const current = s.key in pendingDriver ? pendingDriver[s.key] : values[s.key];
       const changed = current !== s.default;
-      return `<div class="row ${changed ? "changed" : ""} ${s.key in pendingDriver ? "pending" : ""}" data-row="${s.key}">
-        <label><span class="name">${s.label} <span class="badge ${s.backend}">${s.backend}</span></span>${s.help ? `<span class="help">${s.help}</span>` : ""}</label>
+      const why = active(s) ? "" : ` title="No effect with the current ${schema.find(x => x.key === s.depends[0]).label.toLowerCase()} setting"`;
+      return `<div class="row ${changed ? "changed" : ""} ${s.key in pendingDriver ? "pending" : ""} ${active(s) ? "" : "inactive"}" data-row="${s.key}"${why}>
+        <label><span class="name"><span class="dot ${s.backend}" title="${s.backend}"></span>${s.label}</span>${s.help ? `<span class="help">${s.help}</span>` : ""}</label>
         <div class="ctl">${control(s)}</div>
         <button class="reset" data-reset="${s.key}" title="Reset to default (${s.kind === "choice" ? s.choices.find(c => c[0] === s.default)[1] : s.default})" ${changed ? "" : "disabled"}>↺</button>
       </div>`;
@@ -106,7 +135,7 @@ function render() {
     const driverBtn = schema.some(s => s.group === g && s.backend === "driver")
       ? `<div class="row"><span class="note">Driver changes need admin approval, then power-cycle the trackpad (button on its side).</span><span></span>
          <button class="primary" data-apply-driver ${Object.keys(pendingDriver).length ? "" : "disabled"}>Apply driver settings</button></div>` : "";
-    card.innerHTML = `<h2>${g}</h2>${rows}${driverBtn}`;
+    card.innerHTML = `<h2>${g}</h2>${GROUP_NOTES[g] ? `<p class="sub">${GROUP_NOTES[g]}</p>` : ""}${rows}${driverBtn}`;
     main.appendChild(card);
   }
   updateBanner();
@@ -167,7 +196,7 @@ async function load() {
   render();
 }
 
-const es = new EventSource("/events");
+const es = new EventSource("/events?only=action");
 es.onmessage = m => {
   const e = JSON.parse(m.data);
   if (e.type === "action") $("lastAction").textContent = `${e.name}${e.detail ? " → " + e.detail : ""} (${new Date().toLocaleTimeString()})`;

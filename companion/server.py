@@ -18,6 +18,7 @@ import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -37,7 +38,7 @@ class Hub:
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.clients = set()
+        self.clients = {}  # queue -> set of event types it wants (None = all)
         self.recording = None  # (file, path, started)
         self.capture = InputCapture(self.on_capture)
         self.engine = None
@@ -58,25 +59,29 @@ class Hub:
         with self.lock:
             if self.recording:
                 self.recording[0].write(line + "\n")
-            for q in self.clients:
+            for q, kinds in self.clients.items():
+                if kinds is not None and event["type"] not in kinds:
+                    continue
                 try:
                     q.put_nowait(line)
                 except queue.Full:
                     pass  # slow browser tab; drop rather than stall the capture thread
 
     def _update_hook(self):
-        self.capture.set_wheel_hook(bool(self.clients or self.recording))
+        # The low-level wheel hook sees every mouse event system-wide, so only run it when someone needs wheel events.
+        wanted = any(kinds is None or "wheel" in kinds for kinds in self.clients.values())
+        self.capture.set_wheel_hook(bool(wanted or self.recording))
 
-    def add_client(self):
+    def add_client(self, kinds=None):
         q = queue.Queue(maxsize=4000)
         with self.lock:
-            self.clients.add(q)
+            self.clients[q] = kinds
             self._update_hook()
         return q
 
     def remove_client(self, q):
         with self.lock:
-            self.clients.discard(q)
+            self.clients.pop(q, None)
             self._update_hook()
 
     def start_recording(self, label):
@@ -145,8 +150,10 @@ class Handler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length) or b"{}")
 
     def do_GET(self):
-        if self.path == "/events":
-            return self._events()
+        url = urlparse(self.path)
+        if url.path == "/events":
+            only = parse_qs(url.query).get("only")
+            return self._events(set(only[0].split(",")) if only else None)
         if self.path == "/api/devices":
             return self._json(devices.status())
         if self.path == "/api/recordings":
@@ -190,12 +197,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": ok, "values": settings.snapshot()}, 200 if ok else 409)
         self._json({"error": "not found"}, 404)
 
-    def _events(self):
+    def _events(self, kinds):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
-        q = hub.add_client()
+        q = hub.add_client(kinds)
         try:
             while True:
                 try:

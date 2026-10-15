@@ -48,20 +48,28 @@
   ul { list-style: none; padding: 0; margin: 10px 0 0; font-size: 12px; color: var(--muted); max-height: 140px; overflow: auto; }
   li { padding: 3px 0; border-top: 1px solid var(--line); }
   .hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  .toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .toggle input { width: 16px; height: 16px; accent-color: var(--touch); }
+  .preview { position: relative; }
+  .preview .off { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; text-align: center;
+                  padding: 16px; color: var(--muted); font-size: 13px; border-radius: 10px; background: var(--pad); }
+  body.no-preview .preview .off { display: flex; }
 </style>
 </head>
 <body>
 <header>
   <h1>Magic Companion</h1>
   <nav><a href="/" class="on">Live view</a><a href="/settings.html">Settings</a></nav>
-  <span id="conn"><span class="dot"></span>connecting…</span>
+  <label class="toggle"><input type="checkbox" id="previews"> Live previews</label>
+  <span id="conn"><span class="dot"></span>previews off</span>
   <div class="chips" id="battery"></div>
 </header>
 <main>
   <div class="stack">
     <div class="card">
       <h2>Trackpad (live)</h2>
-      <canvas id="pad"></canvas>
+      <div class="preview"><canvas id="pad"></canvas>
+        <div class="off">Live previews are off to save CPU. Gestures, settings and recording keep working.<br>Turn on "Live previews" above to see touches.</div></div>
       <div class="legend">
         <span><i style="background:var(--touch)"></i>touching</span>
         <span><i style="background:var(--palm)"></i>low confidence (palm)</span>
@@ -71,7 +79,7 @@
     </div>
     <div class="card">
       <h2>Scroll timeline (last 6 s)</h2>
-      <canvas id="timeline"></canvas>
+      <div class="preview"><canvas id="timeline"></canvas><div class="off">Previews off</div></div>
       <div class="legend">
         <span><i style="background:var(--touch)"></i>finger motion Y</span>
         <span><i style="background:var(--h)"></i>finger motion X</span>
@@ -230,13 +238,25 @@ function drawStats() {
   $("wheels").textContent = `${counters.v} / ${counters.h}`;
 }
 
-function loop() { drawPad(); drawTimeline(); drawStats(); requestAnimationFrame(loop); }
+let es = null, raf = null;
+function loop() { drawPad(); drawTimeline(); drawStats(); raf = requestAnimationFrame(loop); }
 
-function connect() {
-  const es = new EventSource("/events");
-  es.onopen = () => $("conn").innerHTML = '<span class="dot on"></span>live';
-  es.onerror = () => $("conn").innerHTML = '<span class="dot"></span>reconnecting…';
-  es.onmessage = m => { const e = JSON.parse(m.data); e.type === "frame" ? onFrame(e) : e.type === "wheel" && onWheel(e); };
+// Previews off: no event stream (so the server can drop its system-wide wheel hook) and no redraw loop.
+function setPreviews(on) {
+  document.body.classList.toggle("no-preview", !on);
+  try { localStorage.setItem("previews", on ? "1" : "0"); } catch {}
+  if (on && !es) {
+    es = new EventSource("/events");
+    es.onopen = () => $("conn").innerHTML = '<span class="dot on"></span>live';
+    es.onerror = () => $("conn").innerHTML = '<span class="dot"></span>reconnecting…';
+    es.onmessage = m => { const e = JSON.parse(m.data); e.type === "frame" ? onFrame(e) : e.type === "wheel" && onWheel(e); };
+    raf = requestAnimationFrame(loop);
+  } else if (!on && es) {
+    es.close(); es = null;
+    cancelAnimationFrame(raf); raf = null;
+    latest = null; frameTimes = []; drawStats();
+    $("conn").innerHTML = '<span class="dot"></span>previews off';
+  }
 }
 
 function ago(epochSeconds) {
@@ -277,7 +297,11 @@ $("recbtn").onclick = async () => {
 };
 $("reset").onclick = () => { counters = { frozen: 0, flicker: 0, v: 0, h: 0 }; };
 
-connect(); refreshDevices(); refreshRecordings(); setInterval(refreshDevices, 3000); loop();
+const previewsOn = (() => { try { return localStorage.getItem("previews") === "1"; } catch { return false; } })();
+$("previews").checked = previewsOn;
+$("previews").onchange = e => setPreviews(e.target.checked);
+setPreviews(previewsOn);
+refreshDevices(); refreshRecordings(); setInterval(refreshDevices, 3000);
 </script>
 </body>
 </html>
