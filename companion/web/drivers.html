@@ -8,13 +8,15 @@
 <style>
   .muted { color: var(--muted); }
   .pagehead .note { font-size: 13px; color: var(--muted); }
-  .dot.muted { background: var(--hover); } .dot.warn { background: var(--warn); } .dot.info { background: var(--hover); }
+  .dot.muted { background: var(--hov); } .dot.warn { background: var(--warn); } .dot.info { background: var(--hov); }
   /* The page fits the viewport; each column scrolls on its own so the page itself never does. */
-  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 16px; padding: 12px 20px 16px;
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 0 16px; padding: 12px 20px 16px;
          height: calc(100vh - var(--topbar-h) - var(--botbar-h) - 52px); }
   .col { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow: auto; padding-right: 2px; }
-  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); overflow: auto; } .col { overflow: visible; } }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); overflow: auto; } .col { overflow: visible; } .col + .col { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: 16px; margin-top: 16px; } }
   .card { flex: none; }
+  .col + .col { border-left: 1px solid var(--rule); padding-left: 16px; }
+  .col > .card + .card { border-top: 1px solid var(--rule); padding-top: 16px; }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 0; }
   .kv dt { color: var(--muted); } .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
   .status { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-weight: 600; }
@@ -27,13 +29,13 @@
   .confirm p { margin: 0 0 8px; }
   .progress { margin-top: 12px; font-size: 13px; }
   .steps { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
-  .steps span { padding: 1px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; }
-  .steps span.on { color: var(--ink); border-color: var(--ink); font-weight: 600; }
+  .steps span { padding: 1px 9px; border-radius: 999px; border: 1px solid var(--rule-soft); color: var(--muted); font-size: 12px; }
+  .steps span.on { color: var(--ink); border-color: transparent; background: var(--sel); font-weight: 600; }
   .steps span.fail { color: var(--bad); border-color: var(--bad); }
   .group + .group { margin-top: 14px; }
   .group h3 { margin: 0 0 2px; font-size: 13px; }
   .group .hint { margin: 0 0 4px; }
-  .drow { display: grid; grid-template-columns: 14px 1fr auto; gap: 4px 8px; padding: 7px 0; border-top: 1px solid var(--line); align-items: start; }
+  .drow { display: grid; grid-template-columns: 14px 1fr auto; gap: 4px 8px; padding: 7px 0; border-top: 1px solid var(--rule-soft); align-items: start; }
   .drow .dot { margin-top: 6px; }
   .drow .meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
   .drow .meta b { color: var(--ink); font-weight: 600; }
@@ -41,7 +43,7 @@
   .list li { display: grid; grid-template-columns: 14px 1fr; gap: 8px; align-items: start; }
   .list li .dot { margin-top: 6px; }
   details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
-  pre.log { margin: 8px 0 0; max-height: 220px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  pre.log { margin: 8px 0 0; max-height: 220px; overflow: auto; background: var(--field); border: 1px solid var(--rule-soft); border-radius: 8px;
             padding: 8px 10px; font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
   .popover button.wide { width: 100%; text-align: left; margin-top: 4px; }
 </style>

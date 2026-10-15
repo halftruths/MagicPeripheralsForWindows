@@ -1,12 +1,19 @@
+/* Design language: flat, borderless, separation by hairlines and whitespace; selection by a soft rounded fill.
+   --rule: major separators.  --rule-soft (= --line): minor list/row separators.  --sel: selected fill.  --hover: hover fill.
+   --hov is the trackpad "hovering contact" color (not a UI state). */
 :root {
-  --bg: #f6f6f4; --panel: #ffffff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e2e2e0;
-  --pad: #ececea; --touch: #2f6fe4; --palm: #e08a1e; --hover: #9a9aa0; --bad: #d93a3a; --h: #1f9d6b;
+  --bg: #ffffff; --panel: #ffffff; --ink: #1d1d1f; --muted: #6e6e73;
+  --rule: #d2d2d7; --rule-soft: #ececef; --line: var(--rule-soft); --sel: #ececf0; --hover: #f4f4f6; --field: #ffffff;
+  --shadow: rgba(0,0,0,.22);
+  --pad: #f1f1f3; --touch: #2f6fe4; --palm: #e08a1e; --hov: #9a9aa0; --bad: #d93a3a; --h: #1f9d6b;
   --accent: #2f6fe4; --ok: #1f9d6b; --warn: #c27a12;
   --topbar-h: 44px; --botbar-h: 38px;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #121214; --panel: #1c1c1f; --ink: #f2f2f4; --muted: #9a9aa2; --line: #2c2c31;
-          --pad: #26262a; --touch: #5c93ff; --palm: #f0a043; --hover: #6c6c74; --bad: #ff5c5c; --h: #3ccf95;
+  :root { --bg: #000000; --panel: #000000; --ink: #f5f5f7; --muted: #9a9a9a;
+          --rule: #3a3a3c; --rule-soft: #232325; --sel: #1c1c1e; --hover: #141416; --field: #0d0d0e;
+          --shadow: rgba(0,0,0,.9);
+          --pad: #0e0e10; --touch: #5c93ff; --palm: #f0a043; --hov: #6c6c74; --bad: #ff5c5c; --h: #3ccf95;
           --accent: #5c93ff; --ok: #3ccf95; --warn: #f0a043; }
 }
 * { box-sizing: border-box; }
@@ -15,27 +22,31 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 syste
 
 /* Site-wide bars */
 .bar { position: fixed; left: 0; right: 0; z-index: 50; display: flex; align-items: center; gap: 16px; padding: 0 20px;
-       background: var(--panel); border: 0 solid var(--line); }
+       background: var(--bg); border: 0 solid var(--rule); }
 #topbar { top: 0; height: var(--topbar-h); border-bottom-width: 1px; }
 #topbar h1 { font-size: 15px; margin: 0; font-weight: 600; }
-#topbar h1 a { color: var(--ink); text-decoration: none; }
-#topbar h1 a:hover { opacity: .65; }
-#topbar nav a { color: var(--muted); text-decoration: none; margin-right: 14px; }
-#topbar nav a.on { color: var(--ink); font-weight: 600; }
+#topbar h1 a { color: var(--ink); text-decoration: none; padding: 5px 10px; margin-left: -10px; border-radius: 8px; }
+#topbar h1 a[aria-current] { background: var(--sel); }
+#topbar h1 a:hover { background: var(--hover); }
+#topbar h1 a[aria-current]:hover { background: var(--sel); }
+#topbar nav { display: flex; gap: 2px; }
+#topbar nav a { color: var(--muted); text-decoration: none; padding: 5px 12px; border-radius: 8px; }
+#topbar nav a:hover { background: var(--hover); color: var(--ink); }
+#topbar nav a.on { color: var(--ink); font-weight: 600; background: var(--sel); }
+#topbar a:focus-visible { outline: 1px solid var(--ink); outline-offset: 1px; }
 #statusbar { bottom: 0; height: var(--botbar-h); border-top-width: 1px; font-size: 12px; color: var(--muted); }
 #statusbar .srv { display: flex; align-items: center; white-space: nowrap; }
-#statusbar .devs { margin-left: auto; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: nowrap; overflow: hidden; }
+#statusbar .devs { margin-left: auto; display: flex; gap: 4px; justify-content: flex-end; flex-wrap: nowrap; overflow: hidden; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); display: inline-block; flex: none; }
 .dot.on { background: var(--h); }
-.chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; background: var(--bg); border: 1px solid var(--line);
-        border-radius: 999px; padding: 2px 10px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 8px; padding: 3px 10px; }
 .chip b { color: var(--ink); font-weight: 600; }
-.chip.off { border-style: dashed; }
+.chip.off { opacity: .85; }
 .chip.selectable { cursor: pointer; }
-.chip.selectable:hover { border-color: var(--muted); }
-/* Selected device (settings page): a 2 px white ring drawn inside the border so the bar doesn't shift. */
-.chip.selected { border-style: solid; border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); color: var(--ink); }
-.chip.selectable:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.chip.selectable:hover { background: var(--hover); }
+/* Selected device (settings page): a soft rounded fill with brighter text; unselected chips are plain text. */
+.chip.selected, .chip.selected:hover { background: var(--sel); color: var(--ink); }
+.chip.selectable:focus-visible { outline: 1px solid var(--ink); outline-offset: 0; }
 .chip .via { display: inline-flex; color: var(--muted); }
 .chip small { color: var(--muted); }
 .chip.off b { color: var(--bad); }
@@ -52,8 +63,10 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 syste
 .pagehead .rel, .rel { position: relative; }
 /* Brief color legend followed by a bare chevron that opens the extras. */
 .keygroup { display: flex; align-items: center; gap: 4px; min-width: 0; margin-left: auto; }
-.chevron { background: none; border: 0; padding: 2px 6px; color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; border-radius: 6px; }
-.chevron:hover, .chevron[aria-expanded=true] { color: var(--ink); background: var(--line); }
+.chevron { background: none; border: 0; padding: 3px 8px; color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; border-radius: 8px; }
+.chevron:hover { color: var(--ink); background: var(--hover); }
+.chevron[aria-expanded=true] { color: var(--ink); background: var(--sel); }
+.chevron:focus-visible { outline: 1px solid var(--ink); outline-offset: 0; }
 .chevron::after { content: "\25BE"; }
 .chevron[aria-expanded=true]::after { content: "\25B4"; }
 .popover.left { left: 0; right: auto; }
@@ -63,8 +76,8 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 syste
 .pagehead .inline .dot { margin-right: 6px; }
 @media (max-width: 700px) { .pagehead .keygroup { order: 3; flex: 1 0 100%; justify-content: flex-end; } }
 .popover { position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; width: min(420px, calc(100vw - 32px));
-           background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
-           box-shadow: 0 8px 30px rgba(0,0,0,.25); display: none; font-size: 13px; }
+           background: var(--bg); border: 1px solid var(--rule); border-radius: 12px; padding: 14px;
+           box-shadow: 0 8px 30px var(--shadow); display: none; font-size: 13px; }
 .popover.open { display: block; }
 .popover h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 12px 0 6px; font-weight: 600; }
 .popover h3:first-child { margin-top: 0; }
@@ -73,13 +86,16 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 syste
 .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 .hint { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
-button { font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+button { font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--rule-soft); background: transparent; color: var(--ink); cursor: pointer; }
+button:hover:not(:disabled) { background: var(--hover); }
+button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-visible { outline: 1px solid var(--ink); outline-offset: 1px; }
 button:disabled { opacity: .45; cursor: default; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+/* Cards are bare regions: no fill, no box. Pages separate them with hairlines (--rule between large blocks, --rule-soft between rows). */
+.card { background: none; border: 0; border-radius: 0; padding: 0; }
 .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
 
 /* Action toast, above the status bar */
 #toast { position: fixed; bottom: calc(var(--botbar-h) + 14px); left: 50%; transform: translateX(-50%); z-index: 70;
-         background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0;
+         background: var(--sel); color: var(--ink); border: 1px solid var(--rule); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0;
          transition: opacity .2s; pointer-events: none; max-width: calc(100vw - 32px); }
 #toast.show { opacity: 1; }
