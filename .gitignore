@@ -6,3 +6,5 @@ AmtPtpHidFilter/build/
 intermediate/
 build/result/
 /packages
+companion/recordings/
+__pycache__/
