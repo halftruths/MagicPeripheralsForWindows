@@ -183,7 +183,7 @@ let devLoading = false, devToken = 0, prevConn = null, lastTransport = null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const DEV_NAME = { trackpad: "Magic Trackpad", keyboard: "Magic Keyboard" };
 const TRANSPORT = { usb: " (USB-C)", bluetooth: " (Bluetooth)" };
-const GROUP_OF = { "trackpad:usb": "tp-usb", "trackpad:bluetooth": "tp-bt", "keyboard:bluetooth": "kb-bt" };
+const GROUP_OF = { "trackpad:usb": "tp-usb", "trackpad:bluetooth": "tp-bt", "keyboard:bluetooth": "kb-bt", "keyboard:usb": "kb-usb" };
 const connKey = d => `${!!d.connected}|${d.connected ? d.transport || "" : ""}`;
 
 function onDeviceList(list) {
@@ -344,7 +344,7 @@ function renderDevs() {
       const cls = harmless ? "muted" : { ok: "on", problem: "", warn: "warn", muted: "muted" }[r.state];
       const note = harmless ? HARMLESS_NOTE : r.note;
       const meta = r.present || r.inf ? `<b>${esc(r.inf || "no driver")}</b>${r.service ? ` · ${esc(r.service)}` : ""}${r.version ? ` · ${esc(r.version)}` : ""}` : "";
-      const restart = r.present && r.ours && g.id !== "kb-bt" ? `<button class="small" data-restart="${esc(r.instanceId)}" data-label="${esc(g.title.toLowerCase())}: ${esc(r.label)}" ${snap.busy ? "disabled" : ""}>Restart</button>` : "<span></span>";
+      const restart = r.present && r.ours && !g.id.startsWith("kb-") ? `<button class="small" data-restart="${esc(r.instanceId)}" data-label="${esc(g.title.toLowerCase())}: ${esc(r.label)}" ${snap.busy ? "disabled" : ""}>Restart</button>` : "<span></span>";
       return `<div class="drow"><span class="dot ${cls}"></span><div><div>${esc(r.label)}</div><div class="meta">${meta}</div><div class="meta">${esc(note)}</div></div>${restart}</div>`;
     }).join("") + "</details>").join("");
   if (snap.probe_error) h += `<p class="hint">Last device scan failed: ${esc(snap.probe_error)}</p>`;

@@ -307,7 +307,15 @@ def _classify(nodes, packages):
                    "hint": "Settings are re-read after re-plugging the cable."},
         "kb-bt": {"id": "kb-bt", "title": "Keyboard over Bluetooth", "transport": "bluetooth", "rows": [],
                   "hint": "Uses Windows' inbox drivers. Nothing to install."},
+        "kb-usb": {"id": "kb-usb", "title": "Keyboard over USB-C", "transport": "usb", "rows": [],
+                   "hint": "Uses Windows' inbox drivers. Nothing to install."},
     }
+    # Magic Keyboard interfaces/collections (inbox drivers): BT exposes COL01 keyboard + COL02 vendor; USB exposes
+    # MI_00 Device Management (problem 10 like the trackpad's, harmless) and MI_01 with keyboard/media/vendor collections.
+    kb_bt_names = {"01": "Keyboard (COL01)", "02": "Vendor, battery (COL02)"}
+    kb_mi_names = {"00": "device management", "01": "keyboard"}
+    kb_col_names = {"01": "Keyboard (COL01)", "02": "Media keys (COL02)", "03": "Vendor, battery (COL03)"}
+    kb_hid_usb_re = re.compile(r"^HID\\VID_05AC&PID_([0-9A-F]{4})&MI_(\d\d)&COL(\d\d)\\", re.I)
 
     def row(n, label, expect_ours, mi=None):
         inf = str(n.get("DriverInfPath") or "")
@@ -345,9 +353,18 @@ def _classify(nodes, packages):
             bound = USB_MI[int(m.group(1), 16)] == mi
             groups["tp-usb"]["rows"].append(row(n, f"Interface {int(mi)} (MI_{mi})" + (" - touchpad" if bound else ""), bound, mi))
             continue
+        if m and int(m.group(1), 16) in KEYBOARD_PIDS:
+            mi = m.group(2)
+            suffix = kb_mi_names.get(mi)
+            groups["kb-usb"]["rows"].append(row(n, f"Interface {int(mi)} (MI_{mi})" + (f" - {suffix}" if suffix else ""), False, mi))
+            continue
+        m = kb_hid_usb_re.match(pid_id)
+        if m and int(m.group(1), 16) in KEYBOARD_PIDS:
+            groups["kb-usb"]["rows"].append(row(n, kb_col_names.get(m.group(3), f"Collection COL{m.group(3)}"), False))
+            continue
         m = kb_re.match(pid_id)
         if m and int(m.group(1), 16) in KEYBOARD_PIDS:
-            groups["kb-bt"]["rows"].append(row(n, f"Interface COL{m.group(2)}", False))
+            groups["kb-bt"]["rows"].append(row(n, kb_bt_names.get(m.group(2), f"Interface COL{m.group(2)}"), False))
     out = []
     for g in groups.values():
         g["rows"].sort(key=lambda r: (not r["present"], r["instanceId"].upper()))
