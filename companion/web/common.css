@@ -41,7 +41,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 syste
 .pagehead .grow { margin-left: auto; }
 .pagehead .rel, .rel { position: relative; }
 /* Brief color legend followed by a bare chevron that opens the extras. */
-.keygroup { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.keygroup { display: flex; align-items: center; gap: 4px; min-width: 0; margin-left: auto; }
 .chevron { background: none; border: 0; padding: 2px 6px; color: var(--muted); font-size: 13px; line-height: 1; cursor: pointer; border-radius: 6px; }
 .chevron:hover, .chevron[aria-expanded=true] { color: var(--ink); background: var(--line); }
 .chevron::after { content: "\25BE"; }
@@ -51,7 +51,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 syste
 .pagehead .inline { margin: 0; gap: 4px 14px; min-width: 0; align-items: center; }
 .pagehead .inline span { display: inline-flex; align-items: center; white-space: nowrap; }
 .pagehead .inline .dot { margin-right: 6px; }
-@media (max-width: 700px) { .pagehead .keygroup { order: 3; flex: 1 0 100%; } }
+@media (max-width: 700px) { .pagehead .keygroup { order: 3; flex: 1 0 100%; justify-content: flex-end; } }
 .popover { position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; width: min(420px, calc(100vw - 32px));
            background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
            box-shadow: 0 8px 30px rgba(0,0,0,.25); display: none; font-size: 13px; }
