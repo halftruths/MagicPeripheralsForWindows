@@ -27,6 +27,13 @@
   .side { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; overscroll-behavior: contain; }
   .side .card { flex: none; min-height: 0; }
   .side .reccard { flex: 1 1 0; min-height: 150px; display: flex; flex-direction: column; }
+  .side .reccard:not([open]) { flex: none; min-height: 0; }
+  .reccard summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+  .reccard summary::-webkit-details-marker { display: none; }
+  .reccard summary h2 { margin: 0; }
+  .reccard summary::after { content: "▸"; color: var(--muted); font-size: 12px; }
+  .reccard[open] summary { margin-bottom: 8px; }
+  .reccard[open] summary::after { content: "▾"; }
   @media (max-width: 900px) {
     main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) clamp(120px, 22dvh, 240px); padding: 8px 12px 10px; gap: 10px; }
     .side { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; gap: 10px; }
@@ -113,12 +120,12 @@
       <div class="row previews-row"><label class="toggle"><input type="checkbox" id="previews"> Live previews</label>
         <span id="conn" class="toggle"><span class="dot"></span>previews off</span></div>
     </div>
-    <div class="card reccard">
-      <h2>Record</h2>
+    <details class="card reccard" id="debugcard">
+      <summary><h2>Debug</h2></summary>
       <input type="text" id="label" placeholder="What are you testing? e.g. diagonal scroll in Excel">
       <div class="row"><button class="primary" id="recbtn">Start recording</button></div>
       <ul id="recordings"></ul>
-    </div>
+    </details>
   </div>
 </main>
 <script src="/common.js"></script>
@@ -229,16 +236,18 @@ function drawTimeline() {
   while (wheels.length && wheels[0][0] < t0) wheels.shift();
   ctx.strokeStyle = css("--line"); ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(W, mid); ctx.stroke();
   const tx = t => (t - t0) / span * W;
+  // tanh keeps small motion readable and eases large values toward the edge instead of clipping.
+  const amp = mid * 0.85;
   for (const [t, axis, d] of wheels) {
-    const hgt = Math.max(-mid, Math.min(mid, d / 120 * 30));
+    const hgt = amp * Math.tanh(d / 480);   // one 120-unit notch is about a quarter of the half-height
     if (axis === "v") { ctx.fillStyle = css("--touch"); ctx.globalAlpha = .45; ctx.fillRect(tx(t) - 1.5, mid - hgt, 3, hgt); }   // vertical: filled
     else { ctx.strokeStyle = css("--touch"); ctx.globalAlpha = .8; ctx.lineWidth = 1; ctx.strokeRect(tx(t) - 2.5, mid - hgt, 5, hgt); }   // horizontal: hollow
     ctx.globalAlpha = 1;
   }
-  const scale = mid / 6000;
   for (const [idx, dash] of [[2, []], [1, [6, 4]]]) {   // Y solid, X dashed
     ctx.beginPath(); ctx.strokeStyle = css("--touch"); ctx.lineWidth = 1.5; ctx.setLineDash(dash);
-    motion.forEach((m, i) => { const y = mid - Math.max(-mid, Math.min(mid, m[idx] * scale)); i ? ctx.lineTo(tx(m[0]), y) : ctx.moveTo(tx(m[0]), y); });
+    // ~420 mm/s of finger speed reaches about 3/4 of the half-height.
+    motion.forEach((m, i) => { const y = mid - amp * Math.tanh(m[idx] / 20000); i ? ctx.lineTo(tx(m[0]), y) : ctx.moveTo(tx(m[0]), y); });
     ctx.stroke(); ctx.setLineDash([]);
   }
 }
@@ -284,6 +293,7 @@ function setRecording(on) {
   $("recbtn").textContent = on ? "Stop recording" : "Start recording";
   $("recbtn").className = on ? "rec" : "primary";
   $("recbtn").dataset.on = on ? "1" : "";
+  if (on) $("debugcard").open = true;   // never hide an active recording behind the collapsed section
 }
 
 $("recbtn").onclick = async () => {
