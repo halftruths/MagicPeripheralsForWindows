@@ -135,7 +135,7 @@ const skRows = n => Array.from({ length: n }, () => `<div class="sk-row"><i clas
 function setPhrase(text) {
   if (!text || text === phrase) return;
   phrase = text; lastPhraseAt = Date.now();
-  const box = $("thinkBox");
+  const box = $(devLoading ? "devThinkBox" : "thinkBox");
   if (!box) return;
   for (const old of box.querySelectorAll("span:not(.leaving)")) {
     if (REDUCED.matches) old.remove();
@@ -174,9 +174,74 @@ function leaveLoading() {
   setTimeout(finish, 120);
 }
 setInterval(() => {
-  if (!loading || Date.now() - lastPhraseAt < 2500) return;
+  if (!(loading || devLoading) || Date.now() - lastPhraseAt < 2500) return;
   setPhrase(IDLE_PHRASES[Math.min(idleIdx++, IDLE_PHRASES.length - 1)]);
 }, 500);
+
+// ---- connection changes: re-scan and show the loading treatment on the Devices section only ----
+let devLoading = false, devToken = 0, prevConn = null, lastTransport = null;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const DEV_NAME = { trackpad: "Magic Trackpad", keyboard: "Magic Keyboard" };
+const TRANSPORT = { usb: " (USB-C)", bluetooth: " (Bluetooth)" };
+const GROUP_OF = { "trackpad:usb": "tp-usb", "trackpad:bluetooth": "tp-bt", "keyboard:bluetooth": "kb-bt" };
+const connKey = d => `${!!d.connected}|${d.connected ? d.transport || "" : ""}`;
+
+function onDeviceList(list) {
+  if (!Array.isArray(list)) return;
+  const cur = {};
+  for (const d of list) cur[d.id] = connKey(d);
+  const prev = prevConn, prevT = lastTransport; prevConn = cur;
+  lastTransport = {}; for (const d of list) lastTransport[d.id] = d.connected ? d.transport : null;
+  if (!prev || !snap || loading) return;   // the very first call is the baseline
+  const changes = [];
+  for (const d of list) if (prev[d.id] !== undefined && prev[d.id] !== cur[d.id]) changes.push(Object.assign({}, d, { was: prevT && prevT[d.id] }));
+  if (changes.length) devicesChanged(changes);
+}
+try { window.MC && MC.onDevices && MC.onDevices(onDeviceList); } catch {}
+
+function showDevSkeleton() {
+  devLoading = true; phrase = ""; idleIdx = 0;
+  $("devs").innerHTML = `<h2>Devices</h2><div class="think" id="devThinkBox" role="status" aria-live="polite"></div>${sk("38%", 13)}<div style="height:6px"></div>${skRows(2)}<div style="height:12px"></div>${sk("34%", 13)}<div style="height:6px"></div>${skRows(2)}`;
+}
+async function devicesChanged(changes) {
+  const token = ++devToken;
+  const name = d => (DEV_NAME[d.id] || "device") + (d.connected ? TRANSPORT[d.transport] || "" : "");
+  const first = changes[0];
+  const wants = changes.filter(d => d.connected && GROUP_OF[`${d.id}:${d.transport}`]).map(d => GROUP_OF[`${d.id}:${d.transport}`]);
+  // groups that should stop being active: whatever transport each changed device left (disconnect or switch)
+  const gone = changes.filter(d => d.was && d.was !== (d.connected ? d.transport : null) && GROUP_OF[`${d.id}:${d.was}`]).map(d => GROUP_OF[`${d.id}:${d.was}`]);
+  const settled = s => wants.every(id => (s.groups.find(g => g.id === id) || {}).connected) && gone.every(id => !(s.groups.find(g => g.id === id) || {}).connected);
+  showDevSkeleton();
+  setPhrase(first.connected ? `Detecting the newly connected ${name(first)}…` : `Updating after ${DEV_NAME[first.id] || "device"} disconnected…`);
+  let data = null, legacy = false;
+  for (let attempt = 0; attempt < 4 && token === devToken; attempt++) {
+    if (attempt) { setPhrase("Waiting for Windows to finish setting up the device…"); await sleep(2000); }
+    const base = data ? data.probe_at : snap.probe_at;
+    const rr = await api("/api/drivers/refresh", "POST").catch(() => ({ ok: false }));
+    legacy = !rr.ok;   // old server: 404, so only GET polling (it refreshes when its 30 s cache is stale)
+    const t0 = Date.now(); let got = null;
+    while (token === devToken && Date.now() - t0 < 20000) {
+      await sleep(600);
+      const r = await api("/api/drivers").catch(() => null);
+      if (r && r.ok && !r.data.loading && r.data.probe_at !== base) { got = r.data; break; }
+    }
+    if (token !== devToken) return;
+    if (!got) break;
+    data = got;
+    if (settled(data) || legacy) break;
+  }
+  if (token !== devToken) return;
+  if (!data) { const r = await api("/api/drivers").catch(() => null); if (r && r.ok && !r.data.loading) data = r.data; }
+  const el = $("devs");
+  const swap = () => {
+    devLoading = false; el.classList.remove("fading");
+    if (data) snap = data;
+    render();
+    el.classList.add("reveal"); setTimeout(() => el.classList.remove("reveal"), 300);
+  };
+  if (REDUCED.matches) return swap();
+  el.classList.add("fading"); setTimeout(swap, 120);
+}
 
 const ago = t => {
   const s = Math.max(0, Date.now() / 1000 - t);
@@ -318,7 +383,7 @@ function renderHead() {
 
 function render() {
   if (!snap) return;
-  renderHead(); renderPkg(); renderDevs(); renderEnv();
+  renderHead(); renderPkg(); if (!devLoading) renderDevs(); renderEnv();
   if (!$("last").querySelector("pre") || !watching) renderLast(); else $("logtext").textContent = (snap.action.log || []).join("\n");
 }
 
@@ -330,7 +395,8 @@ async function load() {
     if (r.ok && r.data.loading) {   // new server: first scan still running; show its real phase and ask again shortly
       if (!snap) enterLoading(r.data.label);
       clearTimeout(retryTimer); retryTimer = setTimeout(load, 1500);
-    } else if (r.ok) { clearTimeout(retryTimer); snap = r.data; leaveLoading(); }
+    } else if (r.ok && devLoading) { /* a device re-scan owns the snapshot right now */ }
+    else if (r.ok) { clearTimeout(retryTimer); snap = r.data; leaveLoading(); }
     else {
       $("headnote").textContent = "Could not read driver status";
       if (loading && !snap) { loading = false; $("pkg").innerHTML = '<h2>Driver package</h2><p class="muted">Could not read driver status.</p>'; ["env", "devs", "last"].forEach(i => $(i).innerHTML = `<h2>${{ env: "Environment", devs: "Devices", last: "Last action" }[i]}</h2>`); }
