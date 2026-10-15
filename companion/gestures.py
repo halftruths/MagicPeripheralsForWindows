@@ -23,6 +23,7 @@ FOUR_TAP_KEYS = {
     "notifications": ("win", "n"), "quick_settings": ("win", "a"), "search": ("win", "s"),
     "task_view": ("win", "tab"), "play_pause": ("play_pause",),
 }
+SWIPE_KEYS = dict(FOUR_TAP_KEYS, show_desktop=("win", "d"))
 
 
 def mm(contact):
@@ -136,9 +137,9 @@ class GestureEngine:
         if n == 2 and same_set and not f["button"]:
             self._two_fingers(dx, dy, dt, now)
         elif n == 3 and same_set:
-            self._three_fingers(dx, dy)
+            self._three_fingers(dx, dy, centroid)
         elif n == 4 and same_set:
-            self._four_fingers(centroid)
+            self._swipe("four.", centroid)
 
         if n == 0:
             self._session_end(now)
@@ -158,7 +159,7 @@ class GestureEngine:
             self.drag_ref = centroid
             if self.dragging:
                 self.drag_locked_until = 0.0  # back to 3 fingers: resume moving
-        if new == 4 and self.session:
+        if new in (3, 4) and self.session:
             self.session["swipe_ref"] = centroid
         if old == 3 and self.dragging and 0 < new < 3 and self.s.get("three.dropOnLift"):
             self._release_drag("finger lifted")
@@ -189,8 +190,11 @@ class GestureEngine:
             dx, dy = tx, ty
         self._emit_scroll(*self._wheel_units(dx, dy, speed))
 
-    def _three_fingers(self, dx, dy):
-        if not self.s.get("three.drag"):
+    def _three_fingers(self, dx, dy, centroid):
+        if self.s.get("three.move") == "swipe":
+            self._swipe("three.", centroid)
+            return
+        if self.s.get("three.move") != "drag":
             return
         if not self.dragging:
             tx, ty = self.prev_centroid[0] + dx - self.drag_ref[0], self.prev_centroid[1] + dy - self.drag_ref[1]
@@ -209,30 +213,38 @@ class GestureEngine:
         self.drag_px[1] -= my
         winapi.mouse_move(mx, my)
 
-    def _four_fingers(self, centroid):
+    def _swipe(self, prefix, centroid):
+        """One swipe per session once the centroid has moved past `<prefix>swipeDistance`. prefix is "three." or "four."."""
         sess = self.session
         if sess["swiped"] or "swipe_ref" not in sess:
             return
         tx, ty = centroid[0] - sess["swipe_ref"][0], centroid[1] - sess["swipe_ref"][1]
-        if math.hypot(tx, ty) < self.s.get("four.swipeDistance"):
+        if math.hypot(tx, ty) < self.s.get(prefix + "swipeDistance"):
             return
         sess["swiped"] = True
+        label = ("3" if prefix == "three." else "4") + "-finger swipe"
         if abs(tx) >= abs(ty):
-            side = self.s.get("four.swipeSide")
+            side = self.s.get(prefix + "swipeSide")
             # Natural: fingers move left -> go to the next desktop/app on the right.
-            forward = (tx < 0) != self.s.get("four.swipeSideSwap")
+            forward = (tx < 0) != self.s.get(prefix + "swipeSideSwap")
             if side == "desktops":
                 winapi.press_keys("ctrl", "win", "right" if forward else "left")
-                self._action("4-finger swipe", "next desktop" if forward else "previous desktop")
+                self._action(label, "next desktop" if forward else "previous desktop")
             elif side == "apps":
                 winapi.press_keys("alt", "tab") if forward else winapi.press_keys("alt", "shift", "tab")
-                self._action("4-finger swipe", "next app" if forward else "previous app")
-        elif ty < 0 and self.s.get("four.swipeUp") == "task_view":
-            winapi.press_keys("win", "tab")
-            self._action("4-finger swipe", "task view")
-        elif ty > 0 and self.s.get("four.swipeDown") == "show_desktop":
-            winapi.press_keys("win", "d")
-            self._action("4-finger swipe", "show desktop")
+                self._action(label, "next app" if forward else "previous app")
+            elif side == "back_forward":
+                winapi.press_keys("alt", "right" if forward else "left")
+                self._action(label, "forward" if forward else "back")
+            elif side == "media":
+                winapi.press_keys("next_track" if forward else "prev_track")
+                self._action(label, "next track" if forward else "previous track")
+        else:
+            name = self.s.get(prefix + ("swipeUp" if ty < 0 else "swipeDown"))
+            keys = SWIPE_KEYS.get(name)
+            if keys:
+                winapi.press_keys(*keys)
+                self._action(label, name.replace("_", " "))
 
     def _session_end(self, now):
         sess = self.session

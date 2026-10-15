@@ -24,6 +24,15 @@ def S(key, group, label, kind, default, backend="companion", unit="", min=None, 
             "unit": unit, "min": min, "max": max, "step": step, "choices": choices, "help": help, "depends": depends}
 
 
+# Shared by 3-finger and 4-finger swipes.
+SWIPE_SIDE_CHOICES = [
+    ["off", "Nothing"], ["desktops", "Switch virtual desktop"], ["apps", "Switch app (Alt+Tab)"],
+    ["back_forward", "Back/forward (Alt+Left/Right)"], ["media", "Previous/next track"]]
+SWIPE_VERTICAL_CHOICES = [
+    ["off", "Nothing"], ["task_view", "Task View (Win+Tab)"], ["show_desktop", "Show desktop (Win+D)"],
+    ["notifications", "Notification center (Win+N)"], ["quick_settings", "Quick settings (Win+A)"],
+    ["search", "Search (Win+S)"], ["play_pause", "Play/pause"]]
+
 SCHEMA = [
     # 1 finger
     S("win.tapEnabled", "1 finger", "Tap to left click", "bool", True, "windows"),
@@ -76,30 +85,42 @@ SCHEMA = [
 
     # 3 fingers
     S("three.tap", "3 fingers", "Tap", "choice", "middle", choices=[["off", "Nothing"], ["middle", "Middle click"]]),
-    S("three.drag", "3 fingers", "Three-finger drag", "bool", True),
+    S("three.move", "3 fingers", "3-finger movement", "choice", "swipe", choices=[
+        ["swipe", "Swipe gestures"], ["drag", "Drag"]],
+      help="Three fingers can either swipe (Task View, switch app...) or drag things around, not both - like macOS. "
+           "Taps work in both modes."),
+    S("three.swipeSide", "3 fingers", "Swipe left/right", "choice", "apps", choices=SWIPE_SIDE_CHOICES,
+      depends=("three.move", ["swipe"])),
+    S("three.swipeSideSwap", "3 fingers", "Swap left/right direction", "bool", False,
+      depends=("three.swipeSide", ["desktops", "apps", "back_forward", "media"])),
+    S("three.swipeUp", "3 fingers", "Swipe up", "choice", "task_view", choices=SWIPE_VERTICAL_CHOICES,
+      depends=("three.move", ["swipe"])),
+    S("three.swipeDown", "3 fingers", "Swipe down", "choice", "show_desktop", choices=SWIPE_VERTICAL_CHOICES,
+      depends=("three.move", ["swipe"])),
+    S("three.swipeDistance", "3 fingers", "Swipe distance needed", "float", 20.0, unit="mm", min=5.0, max=80.0, step=1.0,
+      depends=("three.move", ["swipe"])),
     S("three.dragButton", "3 fingers", "Drag with button", "choice", "left", choices=[
         ["left", "Primary"], ["middle", "Middle"], ["right", "Secondary"]],
-      depends=("three.drag", [True])),
+      depends=("three.move", ["drag"])),
     S("three.dragGain", "3 fingers", "Drag pointer speed", "float", 12.0, unit="px/mm", min=1.0, max=60.0, step=0.5,
-      depends=("three.drag", [True])),
+      depends=("three.move", ["drag"])),
     S("three.dragStart", "3 fingers", "Drag start threshold", "float", 3.0, unit="mm", min=0.0, max=15.0, step=0.1,
-      depends=("three.drag", [True])),
+      depends=("three.move", ["drag"])),
     S("three.dropOnLift", "3 fingers", "Drop when a finger is lifted", "bool", False,
-      depends=("three.drag", [True])),
+      depends=("three.move", ["drag"])),
     S("three.dragLock", "3 fingers", "Drag lock after lifting", "int", 0, unit="ms (0 = off)", min=0, max=5000, step=50,
       help="Keeps the button held after lifting; put 3 fingers back to keep dragging. A 1-2 finger tap ends it early.",
-      depends=("three.drag", [True])),
+      depends=("three.move", ["drag"])),
 
     # 4 fingers
     S("four.tap", "4 fingers", "Tap", "choice", "notifications", choices=[
         ["off", "Nothing"], ["notifications", "Notification center (Win+N)"], ["quick_settings", "Quick settings (Win+A)"],
         ["search", "Search (Win+S)"], ["task_view", "Task View (Win+Tab)"], ["play_pause", "Play/pause"]]),
-    S("four.swipeSide", "4 fingers", "Swipe left/right", "choice", "desktops", choices=[
-        ["off", "Nothing"], ["desktops", "Switch virtual desktop"], ["apps", "Switch app (Alt+Tab)"]]),
+    S("four.swipeSide", "4 fingers", "Swipe left/right", "choice", "desktops", choices=SWIPE_SIDE_CHOICES),
     S("four.swipeSideSwap", "4 fingers", "Swap left/right direction", "bool", False,
-      depends=("four.swipeSide", ["desktops", "apps"])),
-    S("four.swipeUp", "4 fingers", "Swipe up", "choice", "task_view", choices=[["off", "Nothing"], ["task_view", "Task View"]]),
-    S("four.swipeDown", "4 fingers", "Swipe down", "choice", "show_desktop", choices=[["off", "Nothing"], ["show_desktop", "Show desktop"]]),
+      depends=("four.swipeSide", ["desktops", "apps", "back_forward", "media"])),
+    S("four.swipeUp", "4 fingers", "Swipe up", "choice", "task_view", choices=SWIPE_VERTICAL_CHOICES),
+    S("four.swipeDown", "4 fingers", "Swipe down", "choice", "show_desktop", choices=SWIPE_VERTICAL_CHOICES),
     S("four.swipeDistance", "4 fingers", "Swipe distance needed", "float", 20.0, unit="mm", min=5.0, max=80.0, step=1.0),
 
     # Taps (companion gestures)

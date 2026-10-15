@@ -4,44 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Magic Companion Settings</title>
+<link rel="stylesheet" href="/common.css">
 <style>
-  :root {
-    --bg: #f6f6f4; --panel: #ffffff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e2e2e0;
-    --accent: #2f6fe4; --ok: #1f9d6b; --warn: #c27a12; --bad: #d93a3a;
-    --b-windows: #2f6fe4; --b-companion: #1f9d6b; --b-driver: #c27a12;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #121214; --panel: #1c1c1f; --ink: #f2f2f4; --muted: #9a9aa2; --line: #2c2c31;
-            --accent: #5c93ff; --ok: #3ccf95; --warn: #f0a043; --bad: #ff5c5c;
-            --b-windows: #5c93ff; --b-companion: #3ccf95; --b-driver: #f0a043; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
-  header { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  h1 { font-size: 16px; margin: 0; font-weight: 600; }
-  nav a { color: var(--muted); text-decoration: none; margin-right: 14px; }
-  nav a.on { color: var(--ink); font-weight: 600; }
-  .legend { margin-left: auto; display: flex; gap: 12px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-  .badge { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 1px 6px; border-radius: 4px;
-           border: 1px solid currentColor; white-space: nowrap; }
-  .badge.windows { color: var(--b-windows); } .badge.companion { color: var(--b-companion); } .badge.driver { color: var(--b-driver); }
-  /* In rows the backend is a colored dot (legend in the header) so labels stay on one line. */
-  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; display: inline-block; }
+  /* In rows the backend is a colored dot (legend in the Key popover) so labels stay on one line. */
   .dot.windows { background: var(--b-windows); } .dot.companion { background: var(--b-companion); } .dot.driver { background: var(--b-driver); }
-  .top { padding: 16px 20px 0; display: grid; gap: 8px; }
-  /* Masonry: cards flow down columns and fill gaps instead of sitting in fixed-height rows. */
-  main { padding: 16px 20px 40px; columns: 360px; column-gap: 16px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
-          break-inside: avoid; margin: 0 0 16px; }
+  .keybtn .flag { display: none; width: 7px; height: 7px; border-radius: 50%; background: var(--b-driver); margin-left: 6px; vertical-align: 1px; }
+  .keybtn .flag.on { display: inline-block; }
+  main { padding: 8px 20px 24px; display: grid; gap: 4px; }
+  h2.sec { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 2px 8px; font-weight: 600; }
+  .cards { display: grid; gap: 16px; align-items: start; }
+  .cards.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cards.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .cards.c1 { grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 1300px) { .cards.c4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 1100px) { .cards.c3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 700px) { .cards.c4, .cards.c3 { grid-template-columns: minmax(0, 1fr); } }
+  .card { padding: 12px 14px; }
   .card .sub { font-size: 12px; color: var(--muted); margin: -4px 0 6px; }
-  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 2px 0 8px; font-weight: 600; }
+  .card h2 { margin: 2px 0 8px; }
+  .rows.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 28px; }
+  @media (max-width: 1300px) { .rows.grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 700px) { .rows.grid { grid-template-columns: minmax(0, 1fr); } }
   .row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
-  .row:first-of-type { border-top: 0; }
+  .rows:not(.grid) > .row:first-child { border-top: 0; }
   .row label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
   .row .name { display: flex; gap: 7px; align-items: baseline; }
   .row .name .dot { transform: translateY(-1px); }
   .row .help { font-size: 12px; color: var(--muted); }
-  .row.changed .name::after { content: "•"; color: var(--accent); }
+  .row.changed .name::after { content: "\2022"; color: var(--accent); }
   .row.inactive label, .row.inactive .ctl { opacity: .4; }
   body.hide-help .help { display: none; }
   .row.pending { background: color-mix(in srgb, var(--b-driver) 8%, transparent); }
@@ -51,41 +41,42 @@
                        font: inherit; font-variant-numeric: tabular-nums; text-align: right; }
   select { padding: 5px 7px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; max-width: 210px; }
   input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
-  button { font: inherit; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
   button.reset { padding: 2px 7px; color: var(--muted); }
   button.primary { background: var(--b-driver); border-color: var(--b-driver); color: #fff; }
-  button:disabled { opacity: .45; cursor: default; }
   .note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
-  .banner { font-size: 13px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
-  .banner b { font-weight: 600; }
-  #feed { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 18px; }
-  #feed span { color: var(--ink); }
-  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
-           padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
-  #toast.show { opacity: 1; }
+  .popover .legend span { display: flex; align-items: center; gap: 8px; }
+  .popover label.chk { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Magic Companion</h1>
-  <nav><a href="/">Live view</a><a href="/settings.html" class="on">Settings</a></nav>
-  <label class="legend" style="margin-left:auto"><input type="checkbox" id="showHelp"> Show descriptions</label>
-  <div class="legend" style="margin-left:0">
-    <span><span class="dot windows"></span> Windows, instant</span>
-    <span><span class="dot companion"></span> Companion, instant</span>
-    <span><span class="dot driver"></span> Driver, UAC + power-cycle</span>
+<div class="pagehead">
+  <h1>Settings</h1>
+  <div class="rel grow">
+    <button class="keybtn" data-pop="keypop" aria-expanded="false">Key<span class="flag" id="keyflag"></span></button>
+    <div class="popover" id="keypop">
+      <h3>Setting types</h3>
+      <div class="legend">
+        <span><span class="dot windows"></span> Windows, instant</span>
+        <span><span class="dot companion"></span> Companion, instant</span>
+        <span><span class="dot driver"></span> Driver, UAC + power-cycle</span>
+      </div>
+      <h3>Status</h3>
+      <div id="notes">Loading…</div>
+      <h3>Display</h3>
+      <label class="chk"><input type="checkbox" id="showHelp"> Show descriptions</label>
+    </div>
   </div>
-</header>
-<div class="top">
-  <div class="banner" id="banner">Loading…</div>
-  <div id="feed">Last gesture: <span id="lastAction">none yet</span></div>
 </div>
 <main id="main"></main>
-<div id="toast"></div>
+<script src="/common.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 let schema = [], values = {}, pendingDriver = {};
-const GROUP_ORDER = ["1 finger", "2 fingers", "Scrolling (companion engine)", "3 fingers", "4 fingers", "Taps", "Pointer", "Click (driver)"];
+const SECTIONS = [
+  { title: "Gestures", cls: "c4", groups: ["1 finger", "2 fingers", "3 fingers", "4 fingers"] },
+  { title: "Click, taps & pointer", cls: "c3", groups: ["Click (driver)", "Taps", "Pointer"] },
+  { title: "Scrolling", cls: "c1", groups: ["Scrolling (companion engine)"], grid: true },
+];
 const GROUP_NOTES = { "Scrolling (companion engine)": "Used when 2-finger scrolling is handled by the companion engine." };
 const current = key => key in pendingDriver ? pendingDriver[key] : values[key];
 // A setting is active if its dependency (and that dependency's own dependency) holds.
@@ -103,53 +94,56 @@ $("showHelp").onchange = e => {
   try { localStorage.setItem("showHelp", e.target.checked ? "1" : "0"); } catch {}
 };
 
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200); }
+const toast = msg => MC.toast(msg);
 
 function fmt(spec, v) { return spec.kind === "float" ? Number(v).toFixed(spec.step < 1 ? (String(spec.step).split(".")[1] || "").length : 0) : v; }
 
 function control(spec) {
-  const v = spec.key in pendingDriver ? pendingDriver[spec.key] : values[spec.key];
+  const v = current(spec.key);
   if (spec.kind === "bool") return `<input type="checkbox" data-key="${spec.key}" ${v ? "checked" : ""}>`;
   if (spec.kind === "choice") return `<select data-key="${spec.key}">${spec.choices.map(([val, label]) => `<option value="${val}" ${val === v ? "selected" : ""}>${label}</option>`).join("")}</select>`;
   return `<input type="number" data-key="${spec.key}" value="${fmt(spec, v)}" min="${spec.min ?? ""}" max="${spec.max ?? ""}" step="${spec.step ?? "any"}">`
        + (spec.unit ? `<span class="unit">${spec.unit}</span>` : "");
 }
 
-function render() {
-  const groups = [...new Set(schema.map(s => s.group))].sort((a, b) => GROUP_ORDER.indexOf(a) - GROUP_ORDER.indexOf(b));
-  const main = $("main");
-  main.innerHTML = "";
-  for (const g of groups) {
-    const card = document.createElement("section");
-    card.className = "card";
-    const rows = schema.filter(s => s.group === g).map(s => {
-      const current = s.key in pendingDriver ? pendingDriver[s.key] : values[s.key];
-      const changed = current !== s.default;
-      const why = active(s) ? "" : ` title="No effect with the current ${schema.find(x => x.key === s.depends[0]).label.toLowerCase()} setting"`;
-      return `<div class="row ${changed ? "changed" : ""} ${s.key in pendingDriver ? "pending" : ""} ${active(s) ? "" : "inactive"}" data-row="${s.key}"${why}>
-        <label><span class="name"><span class="dot ${s.backend}" title="${s.backend}"></span>${s.label}</span>${s.help ? `<span class="help">${s.help}</span>` : ""}</label>
-        <div class="ctl">${control(s)}</div>
-        <button class="reset" data-reset="${s.key}" title="Reset to default (${s.kind === "choice" ? s.choices.find(c => c[0] === s.default)[1] : s.default})" ${changed ? "" : "disabled"}>↺</button>
-      </div>`;
-    }).join("");
-    const driverBtn = schema.some(s => s.group === g && s.backend === "driver")
-      ? `<div class="row"><span class="note">Driver changes need admin approval, then power-cycle the trackpad (button on its side).</span><span></span>
-         <button class="primary" data-apply-driver ${Object.keys(pendingDriver).length ? "" : "disabled"}>Apply driver settings</button></div>` : "";
-    card.innerHTML = `<h2>${g}</h2>${GROUP_NOTES[g] ? `<p class="sub">${GROUP_NOTES[g]}</p>` : ""}${rows}${driverBtn}`;
-    main.appendChild(card);
-  }
-  updateBanner();
+function cardHtml(g, grid) {
+  const rows = schema.filter(s => s.group === g).map(s => {
+    const cur = current(s.key);
+    const changed = cur !== s.default;
+    const why = active(s) ? "" : ` title="No effect with the current ${schema.find(x => x.key === s.depends[0]).label.toLowerCase()} setting"`;
+    return `<div class="row ${changed ? "changed" : ""} ${s.key in pendingDriver ? "pending" : ""} ${active(s) ? "" : "inactive"}" data-row="${s.key}"${why}>
+      <label><span class="name"><span class="dot ${s.backend}" title="${s.backend}"></span>${s.label}</span>${s.help ? `<span class="help">${s.help}</span>` : ""}</label>
+      <div class="ctl">${control(s)}</div>
+      <button class="reset" data-reset="${s.key}" title="Reset to default (${s.kind === "choice" ? s.choices.find(c => c[0] === s.default)[1] : s.default})" ${changed ? "" : "disabled"}>↺</button>
+    </div>`;
+  }).join("");
+  const driverBtn = schema.some(s => s.group === g && s.backend === "driver")
+    ? `<div class="row"><span class="note">Driver changes need admin approval, then power-cycle the trackpad (button on its side).</span><span></span>
+       <button class="primary" data-apply-driver ${Object.keys(pendingDriver).length ? "" : "disabled"}>Apply driver settings</button></div>` : "";
+  return `<section class="card"><h2>${g}</h2>${GROUP_NOTES[g] ? `<p class="sub">${GROUP_NOTES[g]}</p>` : ""}<div class="rows${grid ? " grid" : ""}">${rows}</div>${driverBtn}</section>`;
 }
 
-function updateBanner() {
+function render() {
+  const present = new Set(schema.map(s => s.group));
+  const known = new Set(SECTIONS.flatMap(s => s.groups));
+  const sections = [...SECTIONS, { title: "Other", cls: "c3", groups: [...present].filter(g => !known.has(g)) }];
+  $("main").innerHTML = sections.map(sec => {
+    const gs = sec.groups.filter(g => present.has(g));
+    return gs.length ? `<div class="section"><h2 class="sec">${sec.title}</h2><div class="cards ${sec.cls}">${gs.map(g => cardHtml(g, sec.grid)).join("")}</div></div>` : "";
+  }).join("");
+  updateNotes();
+}
+
+function updateNotes() {
   const mode = values["scroll.mode"];
   const parts = [];
   parts.push(mode === "companion" ? "<b>Scrolling:</b> companion engine. Windows' own scrolling is turned off while the companion runs and turned back on when it exits."
            : mode === "off" ? "<b>Scrolling:</b> off." : "<b>Scrolling:</b> Windows (native).");
   if (values["native.disableMultiFinger"]) parts.push("Windows' own 3/4-finger gestures are off so they don't double-fire; if they still trigger, sign out and back in once.");
   const nPending = Object.keys(pendingDriver).length;
-  if (nPending) parts.push(`<b>${nPending} driver change${nPending > 1 ? "s" : ""} not applied yet.</b>`);
-  $("banner").innerHTML = parts.join(" ");
+  parts.push(nPending ? `<b>${nPending} driver change${nPending > 1 ? "s" : ""} not applied yet.</b>` : "No pending driver changes.");
+  $("notes").innerHTML = parts.map(p => `<p>${p}</p>`).join("");
+  $("keyflag").classList.toggle("on", nPending > 0);
 }
 
 async function save(key, value) {
@@ -195,12 +189,6 @@ async function load() {
   schema = body.schema; values = body.values;
   render();
 }
-
-const es = new EventSource("/events?only=action");
-es.onmessage = m => {
-  const e = JSON.parse(m.data);
-  if (e.type === "action") $("lastAction").textContent = `${e.name}${e.detail ? " → " + e.detail : ""} (${new Date().toLocaleTimeString()})`;
-};
 
 load();
 </script>

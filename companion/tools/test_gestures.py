@@ -67,6 +67,18 @@ def check(name, ok, detail):
 eng = GestureEngine(FakeSettings())
 out = run(eng, swipe(0.0, 3, (0, 0), count=8))
 check("3-finger tap = middle click", out == [("click", "middle")], out)
+out = run(eng, swipe(0.5, 3, (0, -1.0)))
+check("3-finger swipe up = task view (default)", out == [("keys", "win", "tab")], out)
+out = run(eng, swipe(0.6, 3, (-1.0, 0)))
+check("3-finger swipe left = alt+tab (default)", out == [("keys", "alt", "tab")], out)
+eng.shutdown()
+
+eng = GestureEngine(FakeSettings(**{"three.move": "drag"}))
+out = run(eng, swipe(0.0, 3, (0, 0), count=8))
+check("3-finger tap still middle click in drag mode", out == [("click", "middle")], out)
+out = run(eng, swipe(0.5, 3, (0, -1.0)))
+check("3-finger drag mode: no swipe keys, drags instead",
+      not any(e[0] == "keys" for e in out) and out[0] == ("button", "left", True), out[:2])
 
 out = run(eng, swipe(1.0, 3, (1.0, 0)))
 moved = sum(e[1] for e in out if e[0] == "move")
@@ -74,7 +86,7 @@ check("3-finger drag", out[0] == ("button", "left", True) and out[-1] == ("butto
       f"first {out[0]}, last {out[-1]}, moved {moved}px")
 eng.shutdown()
 
-eng = GestureEngine(FakeSettings(**{"three.dragLock": 300}))
+eng = GestureEngine(FakeSettings(**{"three.move": "drag", "three.dragLock": 300}))
 run(eng, swipe(2.0, 3, (1.0, 0)))
 held = log[-1] == ("move", 12, 0) or all(e != ("button", "left", False) for e in log)
 time.sleep(0.5)
@@ -101,6 +113,13 @@ out = run(eng, swipe(7.0, 4, (0, -1.0)))
 check("4-finger swipe up = task view", out == [("keys", "win", "tab")], out)
 out = run(eng, swipe(8.0, 4, (0, 0), count=8))
 check("4-finger tap = notifications", out == [("keys", "win", "n")], out)
+out = run(eng, swipe(8.5, 4, (0, 1.0)))
+check("4-finger swipe down = show desktop", out == [("keys", "win", "d")], out)
+eng.shutdown()
+
+eng = GestureEngine(FakeSettings(**{"four.swipeDown": "notifications"}))
+out = run(eng, swipe(8.7, 4, (0, 1.0)))
+check("4-finger swipe down configured = win+n", out == [("keys", "win", "n")], out)
 eng.shutdown()
 
 eng = GestureEngine(FakeSettings(**{"nav.flick": True}))
