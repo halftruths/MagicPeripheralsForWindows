@@ -3,7 +3,8 @@
 Each setting has a backend:
   windows   applied live through SPI_SETTOUCHPADPARAMETERS / SPI_SETMOUSEBUTTONSWAP; Windows is the source of truth
   companion used by the gesture engine in this process; stored in settings.local.json
-  driver    AmtPtpHidFilter registry parameters; needs elevation and a trackpad power-cycle
+  driver    AmtPtpHidFilter (Bluetooth) and AmtPtpDeviceUsbUm (USB) registry parameters; needs elevation and a
+            trackpad power-cycle / re-plug
 """
 
 import json
@@ -14,7 +15,12 @@ from pathlib import Path
 import winapi
 
 STORE = Path(__file__).resolve().parent / "settings.local.json"
-DRIVER_KEY = r"SYSTEM\CurrentControlSet\Services\AmtPtpHidFilter\Parameters"
+# Bluetooth goes through the kernel filter, USB through the user-mode driver; each reads its own key.
+DRIVER_KEYS = (
+    r"SYSTEM\CurrentControlSet\Services\AmtPtpHidFilter\Parameters",
+    r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\WUDF\Services\AmtPtpDeviceUsbUm\Parameters",
+)
+DRIVER_KEY = DRIVER_KEYS[0]
 
 
 def S(key, group, label, kind, default, backend="companion", unit="", min=None, max=None, step=None, choices=None, help="",

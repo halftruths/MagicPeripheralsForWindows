@@ -35,7 +35,15 @@ def analyze(path):
         print("No touchpad frames.")
         return
     duration = frames[-1]["t"] - frames[0]["t"]
-    print(f"Frames: {len(frames)} over {duration:.1f}s ({len(frames) / max(duration, 1e-6):.0f} Hz)")
+    # Report rate from gaps between consecutive touching frames (idle time between touches would skew a frames/duration average).
+    touching_t = [f["t"] for f in frames if any(c["tip"] for c in f["contacts"])]
+    gaps = sorted(b - a for a, b in zip(touching_t, touching_t[1:]) if b - a < 0.1)
+    if gaps:
+        median = gaps[len(gaps) // 2]
+        print(f"Frames: {len(frames)} over {duration:.1f}s; report rate {1 / median:.0f} Hz (median gap {median * 1000:.1f} ms, "
+              f"p95 gap {gaps[int(len(gaps) * 0.95)] * 1000:.1f} ms)")
+    else:
+        print(f"Frames: {len(frames)} over {duration:.1f}s")
     print(f"Wheel events: {sum(w['axis'] == 'v' for w in wheels)} vertical, {sum(w['axis'] == 'h' for w in wheels)} horizontal")
 
     # Frozen positions and tip flicker

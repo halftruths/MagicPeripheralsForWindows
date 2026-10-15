@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT))
 from battery import DeviceMonitor  # noqa: E402
 from gestures import GestureEngine  # noqa: E402
 from input_capture import X_MAX, Y_MAX, InputCapture  # noqa: E402
-from settings import DRIVER_KEY, SCHEMA, Settings, driver_registry_values  # noqa: E402
+from settings import DRIVER_KEYS, SCHEMA, Settings, driver_registry_values  # noqa: E402
 
 WEB = ROOT / "web"
 RECORDINGS = ROOT / "recordings"
@@ -117,12 +117,14 @@ hub.engine = GestureEngine(settings, hub.on_action)
 
 
 def apply_driver_settings(values):
-    """Write AmtPtpHidFilter parameters through an elevated PowerShell (UAC prompt). Returns True if written."""
+    """Write the Bluetooth and USB driver parameters through an elevated PowerShell (UAC prompt). Returns True if written."""
     regs = driver_registry_values(values)
-    lines = [f"$k = 'HKLM:\\{DRIVER_KEY}'", "New-Item -Path $k -Force | Out-Null"]
-    for name, value in regs.items():
-        signed = value - (1 << 32) if value >= 1 << 31 else value  # PowerShell DWord takes int32
-        lines.append(f"New-ItemProperty -Path $k -Name {name} -PropertyType DWord -Value ([int32]{signed}) -Force | Out-Null")
+    lines = []
+    for key in DRIVER_KEYS:
+        lines += [f"$k = 'HKLM:\\{key}'", "New-Item -Path $k -Force | Out-Null"]
+        for name, value in regs.items():
+            signed = value - (1 << 32) if value >= 1 << 31 else value  # PowerShell DWord takes int32
+            lines.append(f"New-ItemProperty -Path $k -Name {name} -PropertyType DWord -Value ([int32]{signed}) -Force | Out-Null")
     script = Path(tempfile.gettempdir()) / "magic-companion-driver.ps1"
     script.write_text("\n".join(lines), encoding="utf-8")
     # Start-Process throws when the UAC prompt is declined.
