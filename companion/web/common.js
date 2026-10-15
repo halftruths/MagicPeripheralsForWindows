@@ -40,10 +40,11 @@
         const name = esc(d.device);
         if (d.connected) {
           const usb = d.transport === "usb";
-          // Over USB the level isn't readable without admin rights, so show charging plus the last Bluetooth reading.
-          const level = usb
-            ? `<b>⚡ charging</b>${d.percent == null ? "" : `<small> · last ${d.percent}%</small>`}`
-            : d.percent == null ? "reading…" : `<b>${d.percent}%</b>`;
+          // Charging is shown by the percentage pulsing (last known reading; over USB the level isn't readable live).
+          const pct = d.percent == null ? "–%" : `${d.percent}%`;
+          const level = d.charging
+            ? `<b class="charging" title="Charging" aria-label="Charging, ${pct}">${pct}</b>`
+            : d.percent == null ? "reading…" : `<b>${pct}</b>`;
           const via = usb ? "USB-C" : "Bluetooth";
           return `<span class="chip" title="Connected via ${via}"><span class="dot on"></span>${name}`
                + `<span class="via" aria-label="${via}">${usb ? ICON_USB : ICON_BT}</span>${level}</span>`;
