@@ -116,6 +116,12 @@ settings = Settings()
 hub.engine = GestureEngine(settings, hub.on_action)
 
 
+# The USB driver re-reads its settings when sent command 0x00 on its admin-only control pipe, so wired changes
+# apply without a re-plug. Bluetooth still needs a trackpad power-cycle.
+USB_RELOAD_PS = ("try { $p = New-Object System.IO.Pipes.NamedPipeClientStream('.', 'AmtPtpControlPanelUsbUmInterface', 'InOut'); "
+                 "$p.Connect(500); $p.WriteByte(0); $p.Flush(); $b = New-Object byte[] 2; [void]$p.Read($b, 0, 2); $p.Dispose() } catch {}")
+
+
 def apply_driver_settings(values):
     """Write the Bluetooth and USB driver parameters through an elevated PowerShell (UAC prompt). Returns True if written."""
     regs = driver_registry_values(values)
@@ -125,6 +131,7 @@ def apply_driver_settings(values):
         for name, value in regs.items():
             signed = value - (1 << 32) if value >= 1 << 31 else value  # PowerShell DWord takes int32
             lines.append(f"New-ItemProperty -Path $k -Name {name} -PropertyType DWord -Value ([int32]{signed}) -Force | Out-Null")
+    lines.append(USB_RELOAD_PS)
     script = Path(tempfile.gettempdir()) / "magic-companion-driver.ps1"
     script.write_text("\n".join(lines), encoding="utf-8")
     # Start-Process throws when the UAC prompt is declined.

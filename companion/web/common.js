@@ -26,6 +26,10 @@
     return s < 60 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
   }
 
+  const svg = body => `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  const ICON_BT = svg('<polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/>');
+  const ICON_USB = svg('<rect x="2.5" y="8" width="19" height="8" rx="4"/><line x1="7" y1="12" x2="17" y2="12"/>');
+
   async function refreshDevices() {
     try {
       const r = await fetch("/api/devices");
@@ -35,8 +39,14 @@
       $devs.innerHTML = list.map(d => {
         const name = esc(d.device);
         if (d.connected) {
-          const level = d.percent == null ? "reading…" : `<b>${d.percent}%</b>`;
-          return `<span class="chip" title="Connected"><span class="dot on"></span>${name} ${level}</span>`;
+          const usb = d.transport === "usb";
+          // Over USB the level isn't readable without admin rights, so show charging plus the last Bluetooth reading.
+          const level = usb
+            ? `<b>⚡ charging</b>${d.percent == null ? "" : `<small> · last ${d.percent}%</small>`}`
+            : d.percent == null ? "reading…" : `<b>${d.percent}%</b>`;
+          const via = usb ? "USB-C" : "Bluetooth";
+          return `<span class="chip" title="Connected via ${via}"><span class="dot on"></span>${name}`
+               + `<span class="via" aria-label="${via}">${usb ? ICON_USB : ICON_BT}</span>${level}</span>`;
         }
         const last = d.percent == null ? "" : ` · last ${d.percent}% ${ago(d.read_at)}`;
         return `<span class="chip off" title="Not connected"><span class="dot"></span>${name} <b>disconnected</b><small>${last}</small></span>`;

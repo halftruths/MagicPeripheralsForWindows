@@ -28,5 +28,14 @@ foreach ($key in $keys) {
     Write-Output $key
     Get-ItemProperty -Path $key | Select-Object $names | Format-List
 }
+# Ask the USB driver (if the trackpad is plugged in) to re-read its settings now: command 0x00 on its control pipe.
+$usbReloaded = $false
+try {
+    $pipe = New-Object System.IO.Pipes.NamedPipeClientStream('.', 'AmtPtpControlPanelUsbUmInterface', 'InOut')
+    $pipe.Connect(500); $pipe.WriteByte(0); $pipe.Flush()
+    $resp = New-Object byte[] 2; [void]$pipe.Read($resp, 0, 2); $pipe.Dispose()
+    $usbReloaded = $resp[0] -eq 0
+} catch {}
 Write-Output ($(if ($Revert) { 'Reverted to driver defaults.' } else { 'Applied.' }) +
-              ' Power-cycle the trackpad (Bluetooth) or unplug and re-plug it (USB) to apply.')
+              $(if ($usbReloaded) { ' USB driver reloaded its settings.' } else { ' USB: unplug and re-plug to apply (if wired).' }) +
+              ' Bluetooth: power-cycle the trackpad to apply.')

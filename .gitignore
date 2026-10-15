@@ -9,3 +9,4 @@ build/result/
 companion/recordings/
 __pycache__/
 companion/settings.local.json
+companion/*.local.json

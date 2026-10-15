@@ -4,6 +4,10 @@ Connection: the Bluetooth device node (BTHENUM\\DEV_<address>) carries an "is co
 property; its HID service node (BTHENUM\\{00001124-...}_VID&0001004C_PID&<pid>\\...&<address>_...)
 maps the product ID to that address.
 
+Wired: a present USB composite device USB\\VID_05AC&PID_<pid>. Over USB the battery report isn't exposed to
+non-admin processes (the USB driver only serves it on an admin-only pipe), so a wired device shows its last
+Bluetooth reading, kept across restarts in battery.local.json, and is reported as charging.
+
 Battery: the vendor collection (page 0xFF00 usage 0x14), report 0x90. Layout measured on Magic
 Keyboard (0320) and Magic Trackpad (0324): [0x90, status flags, percent]. The status bits are
 not decoded yet, so they're passed through raw. A HID read can return a stale value while the
@@ -11,15 +15,19 @@ device is off, so battery is only trusted while the device is connected.
 """
 
 import ctypes
+import json
 import re
 import threading
 import time
 from ctypes import wintypes as w
+from pathlib import Path
 
 from tools.hidprobe import GUID, HIDD_ATTRIBUTES, hid, hid_interface_paths, kernel32, open_device, setupapi
 
 DEVICE_NAMES = {0x0320: "Magic Keyboard", 0x0324: "Magic Trackpad"}
 BATTERY_MAX_AGE = 60  # seconds between battery reads while connected
+BATTERY_CACHE = Path(__file__).resolve().parent / "battery.local.json"
+DIGCF_PRESENT = 0x02
 
 DIGCF_ALLCLASSES = 0x04
 DEVPROP_TYPE_BOOLEAN = 0x11
@@ -74,6 +82,27 @@ def bluetooth_connection_states():
     return {pid: addr_connected.get(addr, False) for pid, addr in pid_to_addr.items() if pid in DEVICE_NAMES}
 
 
+def usb_connected_pids():
+    """Product IDs of Apple devices currently attached over USB (composite device node present)."""
+    devs = setupapi.SetupDiGetClassDevsW(None, "USB", None, DIGCF_ALLCLASSES | DIGCF_PRESENT)
+    pids = set()
+    try:
+        i = 0
+        while True:
+            info = SP_DEVINFO_DATA(cbSize=ctypes.sizeof(SP_DEVINFO_DATA))
+            if not setupapi.SetupDiEnumDeviceInfo(devs, i, ctypes.byref(info)):
+                break
+            i += 1
+            buf = ctypes.create_unicode_buffer(512)
+            if setupapi.SetupDiGetDeviceInstanceIdW(devs, ctypes.byref(info), buf, len(buf), None):
+                m = re.match(r"USB\\VID_05AC&PID_([0-9A-F]{4})\\", buf.value.upper())
+                if m and int(m.group(1), 16) in DEVICE_NAMES:
+                    pids.add(int(m.group(1), 16))
+    finally:
+        setupapi.SetupDiDestroyDeviceInfoList(devs)
+    return pids
+
+
 def read_battery_reports():
     """Return {product_id: (percent, flags)} for Apple vendor collections that answer report 0x90."""
     results = {}
@@ -101,26 +130,38 @@ class DeviceMonitor:
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.battery = {}       # pid -> (percent, flags, read_at)
+        self.battery = {}       # pid -> (percent, flags, read_at); last Bluetooth reading
         self.was_connected = {}
+        try:
+            saved = json.loads(BATTERY_CACHE.read_text(encoding="utf-8"))
+            self.battery = {int(pid): tuple(v) for pid, v in saved.items()}
+        except (OSError, ValueError):
+            pass
 
     def status(self):
         with self.lock:
             now = time.time()
-            connected = bluetooth_connection_states()
-            stale = [pid for pid, on in connected.items()
+            bluetooth = bluetooth_connection_states()
+            usb = usb_connected_pids()
+            stale = [pid for pid, on in bluetooth.items()
                      if on and (pid not in self.battery or now - self.battery[pid][2] > BATTERY_MAX_AGE
                                 or not self.was_connected.get(pid))]  # re-read right after a reconnect
             if stale:
                 for pid, (percent, flags) in read_battery_reports().items():
-                    if connected.get(pid):
+                    if bluetooth.get(pid):
                         self.battery[pid] = (percent, flags, now)
-            self.was_connected = connected
+                try:
+                    BATTERY_CACHE.write_text(json.dumps(self.battery), encoding="utf-8")
+                except OSError:
+                    pass
+            self.was_connected = bluetooth
             out = []
             for pid, name in DEVICE_NAMES.items():
-                if pid not in connected:
-                    continue  # not paired
+                if pid not in bluetooth and pid not in usb:
+                    continue  # neither paired nor plugged in
+                transport = "usb" if pid in usb else "bluetooth" if bluetooth.get(pid) else None
                 percent, flags, read_at = self.battery.get(pid, (None, None, None))
-                out.append({"device": name, "connected": connected[pid], "percent": percent, "flags": flags,
-                            "read_at": read_at})
+                out.append({"device": name, "connected": transport is not None, "transport": transport,
+                            "charging": transport == "usb", "percent": percent, "flags": flags, "read_at": read_at,
+                            "percentLive": transport == "bluetooth"})
             return out
