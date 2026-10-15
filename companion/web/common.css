@@ -18,6 +18,8 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 syste
        background: var(--panel); border: 0 solid var(--line); }
 #topbar { top: 0; height: var(--topbar-h); border-bottom-width: 1px; }
 #topbar h1 { font-size: 15px; margin: 0; font-weight: 600; }
+#topbar h1 a { color: var(--ink); text-decoration: none; }
+#topbar h1 a:hover { opacity: .65; }
 #topbar nav a { color: var(--muted); text-decoration: none; margin-right: 14px; }
 #topbar nav a.on { color: var(--ink); font-weight: 600; }
 #statusbar { bottom: 0; height: var(--botbar-h); border-top-width: 1px; font-size: 12px; color: var(--muted); }

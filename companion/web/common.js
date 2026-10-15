@@ -17,13 +17,13 @@
 // transient toast (also used for gesture actions) and dropdown wiring.
 (() => {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const NAV = [["/", "Home"], ["/live", "Live"], ["/settings", "Settings"], ["/drivers", "Drivers"]];
+  const NAV = [["/live", "Live"], ["/settings", "Settings"], ["/drivers", "Drivers"]];
   const ALIASES = { "/live.html": "/live", "/settings.html": "/settings", "/index.html": "/live", "/home.html": "/" };
   const path = ALIASES[location.pathname] || location.pathname;
 
   const top = document.createElement("div");
   top.className = "bar"; top.id = "topbar";
-  top.innerHTML = `<h1>Magic Companion</h1><nav>${NAV.map(([href, label]) =>
+  top.innerHTML = `<h1><a href="/"${path === "/" ? ' aria-current="page"' : ""}>Magic Companion</a></h1><nav>${NAV.map(([href, label]) =>
     `<a href="${href}"${href === path ? ' class="on" aria-current="page"' : ""}>${label}</a>`).join("")}</nav>`;
   const bottom = document.createElement("div");
   bottom.className = "bar"; bottom.id = "statusbar";
