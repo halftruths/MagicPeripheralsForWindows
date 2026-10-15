@@ -120,7 +120,8 @@ function fill(el, d) {
   const pct = el.querySelector(".pct"), sub = el.querySelector(".sub");
   pct.textContent = known ? `${d.percent}%` : off || usb ? "–" : "…";
   pct.classList.toggle("low", low);
-  pct.classList.toggle("charging", !off && d.charging && known);
+  // MC.setCharging lets a running pulse finish its cycle (back at full opacity) before stopping, so it never jumps.
+  MC.setCharging(pct, !off && d.charging && known);
   pct.setAttribute("aria-label", known ? `${d.percent} percent${!off && d.charging ? ", charging" : ""}` : "battery level unknown");
   sub.textContent = off ? (known && d.read_at ? `· ${ago(d.read_at)}` : "")
     : usb ? (known ? "charging · last reading" : "charging") : known ? "" : "reading…";

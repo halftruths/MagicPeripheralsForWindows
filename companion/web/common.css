@@ -50,9 +50,9 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 syste
 .chip .via { display: inline-flex; color: var(--muted); }
 .chip small { color: var(--muted); }
 .chip.off b { color: var(--bad); }
-.chip b.charging { animation: chargePulse 2s ease-in-out infinite; }
+.chip b.lvl.charging { animation: chargePulse 2s ease-in-out infinite; }
 @keyframes chargePulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
-@media (prefers-reduced-motion: reduce) { .chip b.charging { animation: none; color: var(--muted); font-weight: 500; } }
+@media (prefers-reduced-motion: reduce) { .chip b.lvl.charging { animation: none; color: var(--muted); font-weight: 500; } }
 .srv .dot { margin-right: 6px; }
 @media (max-width: 700px) { .bar { padding: 0 10px; gap: 8px; } #statusbar .devs .chip small { display: none; } }
 

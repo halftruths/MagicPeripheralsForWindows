@@ -52,28 +52,67 @@
   // turns them into an in-place selector via MC.selectDevices (the selected chip gets the soft --sel fill).
   const openSettings = id => { location.href = `/settings?device=${encodeURIComponent(id)}`; };
   const picker = { onSelect: openSettings, selected: null };
-  function renderChips(list) {
+  function chipMarkup(d) {
     const selectable = !!picker.onSelect;
-    $devs.innerHTML = list.map(d => {
-      const name = esc(d.device);
-      const sel = selectable && picker.selected != null && d.id === picker.selected;
-      const attrs = ` data-dev="${esc(d.id || "")}"` + (selectable
-        ? ` role="button" tabindex="0"${picker.selected != null ? ` aria-pressed="${sel}"` : ""} aria-label="Open ${name} settings"` : "");
-      const cls = (selectable ? " selectable" : "") + (sel ? " selected" : "");
-      if (d.connected) {
-        const usb = d.transport === "usb";
-        // Charging is shown by the percentage pulsing (last known reading; over USB the level isn't readable live).
-        const pct = d.percent == null ? "–%" : `${d.percent}%`;
-        const level = d.charging
-          ? `<b class="charging" title="Charging" aria-label="Charging, ${pct}">${pct}</b>`
-          : d.percent == null ? "reading…" : `<b>${pct}</b>`;
-        const via = usb ? "USB-C" : "Bluetooth";
-        return `<span class="chip${cls}"${attrs} title="Connected via ${via}"><span class="dot on"></span>${name}`
-             + `<span class="via" aria-label="${via}">${usb ? ICON_USB : ICON_BT}</span>${level}</span>`;
+    const name = esc(d.device);
+    const sel = selectable && picker.selected != null && d.id === picker.selected;
+    const attrs = ` data-dev="${esc(d.id || "")}"` + (selectable
+      ? ` role="button" tabindex="0"${picker.selected != null ? ` aria-pressed="${sel}"` : ""} aria-label="Open ${name} settings"` : "");
+    const cls = (selectable ? " selectable" : "") + (sel ? " selected" : "");
+    if (d.connected) {
+      const usb = d.transport === "usb";
+      // Charging is shown by the percentage pulsing (class added by setCharging, not part of this markup).
+      const pct = d.percent == null ? (d.charging ? "–%" : "reading…") : `${d.percent}%`;
+      const via = usb ? "USB-C" : "Bluetooth";
+      return `<span class="chip${cls}"${attrs} title="Connected via ${via}"><span class="dot on"></span>${name}`
+           + `<span class="via" aria-label="${via}">${usb ? ICON_USB : ICON_BT}</span><b class="lvl">${pct}</b></span>`;
+    }
+    const last = d.percent == null ? "" : ` · last ${d.percent}% ${ago(d.read_at)}`;
+    return `<span class="chip off${cls}"${attrs} title="Not connected"><span class="dot"></span>${name} <b>disconnected</b><small>${last}</small></span>`;
+  }
+  // Chips are updated in place (keyed by device) instead of rebuilt every poll: rebuilding restarted the charging
+  // pulse mid-cycle every 3 s. A chip's node is only replaced when its visible content changes.
+  function renderChips(list) {
+    if (!list.length) { $devs.innerHTML = '<span class="chip">no Apple devices paired</span>'; return; }
+    const keep = new Set();
+    let prev = null;
+    for (const d of list) {
+      const html = chipMarkup(d);
+      let node = [...$devs.children].find(c => c.dataset.dev === String(d.id || ""));
+      if (!node || node.dataset.sig !== html) {
+        const tpl = document.createElement("template");
+        tpl.innerHTML = html;
+        const fresh = tpl.content.firstElementChild;
+        fresh.dataset.sig = html;
+        const wasCharging = node && node.querySelector("b.lvl.charging");
+        if (node) node.replaceWith(fresh); else $devs.appendChild(fresh);
+        node = fresh;
+        if (wasCharging) node.querySelector("b.lvl")?.classList.add("charging");
       }
-      const last = d.percent == null ? "" : ` · last ${d.percent}% ${ago(d.read_at)}`;
-      return `<span class="chip off${cls}"${attrs} title="Not connected"><span class="dot"></span>${name} <b>disconnected</b><small>${last}</small></span>`;
-    }).join("") || '<span class="chip">no Apple devices paired</span>';
+      // Only move a node if it's out of order (moving restarts its animation too).
+      if ((prev ? prev.nextElementSibling : $devs.firstElementChild) !== node) {
+        if (prev) prev.after(node); else $devs.prepend(node);
+      }
+      const lvl = node.querySelector("b.lvl");
+      if (lvl) setCharging(lvl, !!d.charging, lvl.textContent);
+      keep.add(node);
+      prev = node;
+    }
+    [...$devs.children].forEach(c => { if (!keep.has(c)) c.remove(); });
+  }
+  // Start the pulse immediately; when charging stops, let the running cycle finish (it ends at full opacity) before
+  // removing the class, so the level settles without a jump. Used by the status bar and the home page.
+  function setCharging(el, on, label) {
+    el.title = on ? "Charging" : "";
+    if (label != null) el.setAttribute("aria-label", on ? `Charging, ${label}` : label);
+    if (on) { el.classList.remove("charge-ending"); el.classList.add("charging"); return; }
+    if (!el.classList.contains("charging") || el.classList.contains("charge-ending")) return;
+    if (getComputedStyle(el).animationName === "none") { el.classList.remove("charging"); return; }  // reduced motion
+    el.classList.add("charge-ending");
+    el.addEventListener("animationiteration", function end() {
+      el.removeEventListener("animationiteration", end);
+      if (el.classList.contains("charge-ending")) el.classList.remove("charging", "charge-ending");
+    });
   }
   function pickFrom(e) {
     const chip = e.target.closest(".chip.selectable");
@@ -148,7 +187,7 @@
   });
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeAll(); });
 
-  window.MC = { toast, esc, stream, devices: null, onDevices(fn) { deviceListeners.push(fn); if (MC.devices) fn(MC.devices); },
+  window.MC = { toast, esc, stream, setCharging, devices: null, onDevices(fn) { deviceListeners.push(fn); if (MC.devices) fn(MC.devices); },
     // selectDevices({selected, onSelect}): turn the status-bar chips into a device selector; call again to move the selection.
     selectDevices(opts) { Object.assign(picker, opts); if (MC.devices) renderChips(MC.devices); } };
 })();
