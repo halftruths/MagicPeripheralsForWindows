@@ -58,7 +58,7 @@
     };
   } catch {}
 
-  // Dropdowns: <button class="morebtn" data-pop="id"> toggles <div class="popover" id="id">.
+  // Dropdowns: <button class="chevron" data-pop="id"> toggles <div class="popover" id="id">.
   function closeAll(except) {
     document.querySelectorAll(".popover.open").forEach(p => {
       if (p === except) return;

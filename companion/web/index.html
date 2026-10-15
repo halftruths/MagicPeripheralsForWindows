@@ -35,15 +35,22 @@
   <h1>Live view</h1>
   <label class="toggle"><input type="checkbox" id="previews"> Live previews</label>
   <span id="conn"><span class="dot"></span>previews off</span>
-  <div class="legend inline" aria-label="Trackpad visualizer legend">
-    <span><i style="background:var(--touch)"></i>touching</span>
-    <span><i style="background:var(--palm)"></i>low confidence (palm)</span>
-    <span><i style="background:var(--hover)"></i>hovering (tip off)</span>
-    <span><i style="background:var(--bad)"></i>frozen position</span>
-  </div>
-  <div class="rel grow">
-    <button class="morebtn" data-pop="morepop" aria-expanded="false" aria-haspopup="true">More</button>
-    <div class="popover" id="morepop">
+  <div class="rel keygroup">
+    <div class="legend inline" aria-label="Trackpad visualizer legend">
+      <span><i style="background:var(--touch)"></i>touch</span>
+      <span><i style="background:var(--palm)"></i>palm</span>
+      <span><i style="background:var(--hover)"></i>hover</span>
+      <span><i style="background:var(--bad)"></i>frozen</span>
+    </div>
+    <button class="chevron" data-pop="morepop" aria-label="More options" aria-expanded="false" aria-haspopup="true"></button>
+    <div class="popover left" id="morepop">
+      <h3>Trackpad</h3>
+      <div class="legend">
+        <span><i style="background:var(--touch)"></i>touching</span>
+        <span><i style="background:var(--palm)"></i>low confidence (palm)</span>
+        <span><i style="background:var(--hover)"></i>hovering (tip off)</span>
+        <span><i style="background:var(--bad)"></i>frozen position</span>
+      </div>
       <h3>Scroll timeline</h3>
       <div class="legend">
         <span><i style="background:var(--touch)"></i>finger motion Y</span>

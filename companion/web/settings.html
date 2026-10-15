@@ -8,8 +8,8 @@
 <style>
   /* In rows the backend is a colored dot (legend inline in the title row) so labels stay on one line. */
   .dot.windows { background: var(--b-windows); } .dot.companion { background: var(--b-companion); } .dot.driver { background: var(--b-driver); }
-  .morebtn .flag { display: none; width: 7px; height: 7px; border-radius: 50%; background: var(--b-driver); margin-left: 6px; vertical-align: 1px; }
-  .morebtn .flag.on { display: inline-block; }
+  .chevron .flag { display: none; width: 7px; height: 7px; border-radius: 50%; background: var(--b-driver); margin-left: 6px; vertical-align: 1px; }
+  .chevron .flag.on { display: inline-block; }
   main { padding: 8px 20px 24px; display: grid; gap: 4px; }
   h2.sec { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 2px 8px; font-weight: 600; }
   .cards { display: grid; gap: 16px; align-items: start; }
@@ -74,14 +74,20 @@
 <body>
 <div class="pagehead">
   <h1>Settings</h1>
-  <div class="legend inline" aria-label="Setting types">
-    <span><span class="dot windows"></span>Windows · instant</span>
-    <span><span class="dot companion"></span>Companion · instant</span>
-    <span><span class="dot driver"></span>Driver · UAC + power-cycle</span>
-  </div>
-  <div class="rel grow">
-    <button class="morebtn" data-pop="morepop" aria-expanded="false" aria-haspopup="true">More<span class="flag" id="keyflag"></span></button>
-    <div class="popover" id="morepop">
+  <div class="rel keygroup">
+    <div class="legend inline" aria-label="Setting types">
+      <span><span class="dot windows"></span>Windows</span>
+      <span><span class="dot companion"></span>Companion</span>
+      <span><span class="dot driver"></span>Driver</span>
+    </div>
+    <button class="chevron" data-pop="morepop" aria-label="More options" aria-expanded="false" aria-haspopup="true"><span class="flag" id="keyflag"></span></button>
+    <div class="popover left" id="morepop">
+      <h3>Setting types</h3>
+      <div class="legend">
+        <span><span class="dot windows"></span>Windows: applied instantly through Windows' touchpad settings</span>
+        <span><span class="dot companion"></span>Companion: applied instantly by the companion while it runs</span>
+        <span><span class="dot driver"></span>Driver: needs admin approval, then power-cycle the trackpad</span>
+      </div>
       <h3>Status</h3>
       <div id="notes">Loading…</div>
       <h3>Display</h3>
@@ -205,7 +211,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && raised.length && !document.querySelector(".popover.open")) collapse(raised[raised.length - 1]);
 }, true);
 document.addEventListener("click", e => {
-  if (raised.length && !e.target.closest(".card, .bar, .popover, .morebtn, #toast")) { raised = []; layout(); }
+  if (raised.length && !e.target.closest(".card, .bar, .popover, .chevron, #toast")) { raised = []; layout(); }
 });
 let layoutQueued = false;
 window.addEventListener("resize", () => { if (layoutQueued) return; layoutQueued = true; requestAnimationFrame(() => { layoutQueued = false; layout(); }); });
