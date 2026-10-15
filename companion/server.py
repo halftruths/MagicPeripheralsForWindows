@@ -30,7 +30,9 @@ from settings import DRIVER_KEYS, SCHEMA, Settings, driver_registry_values  # no
 
 WEB = ROOT / "web"
 RECORDINGS = ROOT / "recordings"
-CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css"}
+CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml"}
+PAGES = {"/": "home.html", "/live": "live.html", "/settings": "settings.html", "/drivers": "drivers.html"}
+REDIRECTS = {"/index.html": "/live", "/settings.html": "/settings"}
 
 
 class Hub:
@@ -173,7 +175,13 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/status":
             rec = hub.recording
             return self._json({"recording": rec[1].name if rec else None, "x_max": X_MAX, "y_max": Y_MAX})
-        name = "index.html" if self.path == "/" else self.path.lstrip("/")
+        if url.path in REDIRECTS:
+            self.send_response(301)
+            self.send_header("Location", REDIRECTS[url.path] + (f"?{url.query}" if url.query else ""))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        name = PAGES.get(url.path) or url.path.lstrip("/")
         file = (WEB / name).resolve()
         if WEB not in file.parents or not file.is_file():
             return self._json({"error": "not found"}, 404)

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magic Companion</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  html, body { overflow: hidden; overscroll-behavior: none; }
+  body { height: 100dvh; min-height: 0; display: flex; flex-direction: column; }
+  [hidden] { display: none !important; }
+  main { flex: 1 1 0; min-height: 0; position: relative; display: flex; flex-direction: column; }
+
+  .carousel { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; position: relative; }
+  .track { flex: 1 1 0; min-height: 0; display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory;
+           overscroll-behavior: contain; scrollbar-width: none; scroll-behavior: smooth; }
+  .track::-webkit-scrollbar { display: none; }
+  @media (prefers-reduced-motion: reduce) { .track { scroll-behavior: auto; } }
+  .track:focus-visible { outline: 1px solid var(--muted); outline-offset: -4px; }
+
+  .slide { flex: 0 0 100%; min-width: 0; scroll-snap-align: center; scroll-snap-stop: always; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; gap: 6px; padding: 12px 56px; text-align: center; overflow-y: auto;
+           overscroll-behavior: contain; }
+  .slide > * { flex: none; }
+  .art { height: clamp(70px, 27dvh, 200px); max-width: 80%; color: var(--ink); margin-bottom: 4px; }
+  .art.trackpad { aspect-ratio: 220 / 150; }
+  .art.keyboard { aspect-ratio: 280 / 110; }
+  .slide.off .art { stroke-dasharray: 4 4; opacity: .4; }
+  .slide.off .name { color: var(--muted); }
+  .name { margin: 0; font-size: 18px; font-weight: 600; }
+  .conn { margin: 0; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .conn svg { flex: none; }
+
+  .level { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .pct { font-size: clamp(40px, 11dvh, 84px); line-height: 1; font-weight: 600; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .slide.off .pct { color: var(--muted); font-weight: 500; }
+  .pct.charging { animation: chargePulse 2s ease-in-out infinite; }
+  @keyframes chargePulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { .pct.charging { animation: none; color: var(--muted); font-weight: 500; } }
+  .pct.low { color: var(--bad); }
+
+  .bar { width: min(260px, 70%); height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 4px; }
+  .bar i { display: block; height: 100%; background: var(--ink); border-radius: 2px; }
+  .bar.low i { background: var(--bad); }
+  .slide.off .bar { background: transparent; border: 1px solid var(--line); height: 6px; }
+  .slide.off .bar i { background: transparent; border: 1px solid var(--muted); border-radius: 2px; }
+  .slide.off .bar.low i { border-color: var(--bad); }
+
+  .dtog { margin-top: 10px; padding: 2px 8px; border: 0; background: none; color: var(--muted); font-size: 12px; }
+  .dtog:hover, .dtog[aria-expanded=true] { color: var(--ink); }
+  .dtog::after { content: " \25BE"; }
+  .dtog[aria-expanded=true]::after { content: " \25B4"; }
+  .details { margin: 0; display: grid; grid-template-columns: auto auto; gap: 2px 14px; font-size: 12px; text-align: left; }
+  .details[hidden] { display: none; }
+  .details dt { color: var(--muted); }
+  .details dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+  .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 36px; height: 36px; padding: 0; border: 0; background: none;
+         color: var(--muted); font-size: 22px; line-height: 1; border-radius: 50%; }
+  .nav:hover:not(:disabled) { color: var(--ink); background: var(--line); }
+  .nav.prev { left: 10px; } .nav.next { right: 10px; }
+  .nav:disabled { opacity: .2; }
+  .dots { flex: none; display: flex; justify-content: center; gap: 4px; padding: 0 0 10px; }
+  .dots button { width: 22px; height: 22px; padding: 0; border: 0; background: none; border-radius: 50%; display: grid; place-items: center; }
+  .dots button::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--muted); }
+  .dots button[aria-current=true]::before { background: var(--ink); border-color: var(--ink); }
+  .single .nav, .single .dots { display: none; }
+
+  .empty { margin: auto; text-align: center; color: var(--muted); }
+  .empty p { margin: 0 0 6px; font-size: 16px; color: var(--ink); }
+  .empty a { color: var(--muted); }
+  .empty a:hover { color: var(--ink); }
+  @media (max-width: 560px) { .slide { padding: 12px 40px; } .nav.prev { left: 2px; } .nav.next { right: 2px; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="carousel" id="carousel" role="region" aria-roledescription="carousel" aria-label="Apple devices" hidden>
+    <div class="track" id="track" tabindex="0"></div>
+    <button class="nav prev" id="prev" aria-label="Previous device">&#8249;</button>
+    <button class="nav next" id="next" aria-label="Next device">&#8250;</button>
+    <div class="dots" id="dots"></div>
+  </div>
+  <div class="empty" id="empty" hidden>
+    <p>No Apple devices paired</p>
+    <a href="/settings">Open settings</a>
+  </div>
+</main>
+<script src="/common.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = MC.esc;
+const track = $("track"), dots = $("dots"), carousel = $("carousel");
+
+const svg = body => `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+const ICON_BT = svg('<polyline points="6.5 6.5 17.5 17.5 12 23 12 1 17.5 6.5 6.5 17.5"/>');
+const ICON_USB = svg('<rect x="2.5" y="8" width="19" height="8" rx="4"/><line x1="7" y1="12" x2="17" y2="12"/>');
+
+function ago(t) {
+  if (t == null) return "";
+  const s = Math.max(0, Date.now() / 1000 - t);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return `${Math.round(s / 86400)} d ago`;
+}
+
+const opened = new Set();   // device ids whose Details are expanded; survives rebuilds
+let ids = [], active = 0, observer = null;
+
+function buildSlide(d, i, n) {
+  const el = document.createElement("section");
+  el.className = "slide"; el.dataset.id = d.id;
+  el.setAttribute("role", "group"); el.setAttribute("aria-roledescription", "slide");
+  el.setAttribute("aria-label", `${i + 1} of ${n}`);
+  el.innerHTML = `<svg class="art ${esc(d.id)}" aria-hidden="true"><use href="/devices.svg#dev-${esc(d.id)}"/></svg>`
+    + `<h2 class="name"></h2><p class="conn"></p>`
+    + `<div class="level"><span class="pct"></span><span class="sub"></span></div><div class="bar"><i></i></div>`
+    + `<button class="dtog" aria-expanded="false">Details</button>`
+    + `<dl class="details" hidden><dt>Address</dt><dd data-k="address"></dd><dt>Serial</dt><dd data-k="serial"></dd><dt>Firmware</dt><dd data-k="firmware"></dd></dl>`;
+  const btn = el.querySelector(".dtog"), dl = el.querySelector(".details");
+  btn.onclick = () => {
+    const on = dl.hidden;
+    dl.hidden = !on; btn.setAttribute("aria-expanded", on ? "true" : "false");
+    on ? opened.add(d.id) : opened.delete(d.id);
+  };
+  if (opened.has(d.id)) { dl.hidden = false; btn.setAttribute("aria-expanded", "true"); }
+  return el;
+}
+
+function fill(el, d) {
+  const off = !d.connected, usb = d.transport === "usb", known = d.percent != null;
+  const low = known && d.percent <= 20;
+  el.classList.toggle("off", off);
+  el.querySelector(".name").textContent = d.name || d.device;
+  const seen = ago(d.lastSeen ?? d.read_at);
+  el.querySelector(".conn").innerHTML = off
+    ? `Disconnected${seen ? ` · last seen ${esc(seen)}` : ""}`
+    : `${usb ? ICON_USB : ICON_BT}${usb ? "USB-C" : "Bluetooth"}`;
+  const pct = el.querySelector(".pct"), sub = el.querySelector(".sub");
+  pct.textContent = known ? `${d.percent}%` : off || usb ? "–" : "…";
+  pct.classList.toggle("low", low);
+  pct.classList.toggle("charging", !off && d.charging && known);
+  pct.setAttribute("aria-label", known ? `${d.percent} percent${!off && d.charging ? ", charging" : ""}` : "battery level unknown");
+  sub.textContent = off ? (known && d.read_at ? `· ${ago(d.read_at)}` : "")
+    : usb ? (known ? "charging · last reading" : "charging") : known ? "" : "reading…";
+  const bar = el.querySelector(".bar");
+  bar.classList.toggle("low", low);
+  bar.firstElementChild.style.width = known ? `${Math.max(0, Math.min(100, d.percent))}%` : "0";
+  for (const dd of el.querySelectorAll("[data-k]")) dd.textContent = d[dd.dataset.k] || "–";
+}
+
+function sortDevices(list) {
+  return list.map((d, i) => [d, i]).sort((a, b) => (b[0].connected - a[0].connected) || (a[1] - b[1])).map(x => x[0]);
+}
+
+function slideWidth() { return track.clientWidth || 1; }
+function goTo(i, instant) {
+  i = Math.max(0, Math.min(ids.length - 1, i));
+  track.scrollTo({ left: i * slideWidth(), behavior: instant ? "instant" : "auto" });  // "auto" defers to CSS scroll-behavior
+}
+function setActive(i) {
+  active = i;
+  [...dots.children].forEach((b, k) => b.setAttribute("aria-current", k === i ? "true" : "false"));
+  $("prev").disabled = i <= 0; $("next").disabled = i >= ids.length - 1;
+}
+
+function rebuild(list) {
+  const keep = ids[active];
+  ids = list.map(d => d.id);
+  track.replaceChildren(...list.map((d, i) => buildSlide(d, i, list.length)));
+  dots.replaceChildren(...list.map((d, i) => {
+    const b = document.createElement("button");
+    b.setAttribute("aria-label", `Show ${d.name || d.device} (${i + 1} of ${list.length})`);
+    b.onclick = () => goTo(i);
+    return b;
+  }));
+  carousel.classList.toggle("single", list.length < 2);
+  if (observer) observer.disconnect();
+  observer = new IntersectionObserver(entries => {
+    for (const e of entries) if (e.isIntersecting && e.intersectionRatio >= 0.6) setActive([...track.children].indexOf(e.target));
+  }, { root: track, threshold: [0.6] });
+  [...track.children].forEach(s => observer.observe(s));
+  const at = Math.max(0, ids.indexOf(keep));
+  goTo(at, true); setActive(at);
+}
+
+function render(list) {
+  list = sortDevices(list || []);
+  $("carousel").hidden = !list.length;
+  $("empty").hidden = !!list.length;
+  if (!list.length) { ids = []; track.replaceChildren(); return; }
+  if (list.map(d => d.id).join() !== ids.join()) rebuild(list);
+  list.forEach((d, i) => fill(track.children[i], d));
+}
+
+document.addEventListener("keydown", e => {
+  if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || ids.length < 2) return;
+  if (e.key === "ArrowLeft") { goTo(active - 1); e.preventDefault(); }
+  else if (e.key === "ArrowRight") { goTo(active + 1); e.preventDefault(); }
+});
+$("prev").onclick = () => goTo(active - 1);
+$("next").onclick = () => goTo(active + 1);
+window.addEventListener("resize", () => goTo(active, true));
+
+MC.onDevices(render);
+</script>
+</body>
+</html>
