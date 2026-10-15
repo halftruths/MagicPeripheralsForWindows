@@ -85,7 +85,7 @@
     <div class="popover" id="morepop">
       <h3>Setting types</h3>
       <p>Settings without a mark apply instantly.</p>
-      <p>* Driver settings: apply, then power-cycle the trackpad (USB-C applies immediately).</p>
+      <p>* Driver settings: apply, then power-cycle the trackpad (Bluetooth) or unplug and re-plug it (USB-C).</p>
       <h3>Status</h3>
       <div id="notes">Loading…</div>
       <h3>Display</h3>
@@ -93,7 +93,7 @@
     </div>
   </div>
 </div>
-<div class="popover" id="drvpop" role="dialog"><p>Driver setting — applied with “Apply driver settings” (needs admin approval), then power-cycle the trackpad over Bluetooth; over USB-C it applies immediately.</p></div>
+<div class="popover" id="drvpop" role="dialog"><p>Driver setting — applied with “Apply driver settings” (needs admin approval), then power-cycle the trackpad over Bluetooth, or unplug and re-plug it over USB-C.</p></div>
 <main id="main"></main>
 <script src="/common.js"></script>
 <script>
@@ -241,7 +241,7 @@ async function save(key, value) {
     const wasEmpty = !Object.keys(pendingDriver).length;
     if (value === values[key]) delete pendingDriver[key]; else pendingDriver[key] = value;
     render();
-    if (wasEmpty && Object.keys(pendingDriver).length) MC.toast("Restart required — click Apply driver settings, then power-cycle the trackpad.", 5000);
+    if (wasEmpty && Object.keys(pendingDriver).length) MC.toast("Restart required — click Apply driver settings, then power-cycle the trackpad (or re-plug USB-C).", 5000);
     return;
   }
   const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ changes: { [key]: value } }) });

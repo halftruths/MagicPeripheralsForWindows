@@ -116,8 +116,10 @@ settings = Settings()
 hub.engine = GestureEngine(settings, hub.on_action)
 
 
-# The USB driver re-reads its settings when sent command 0x00 on its admin-only control pipe, so wired changes
-# apply without a re-plug. Bluetooth still needs a trackpad power-cycle.
+# Command 0x00 on the USB driver's admin-only control pipe re-applies haptics live. In the installed v2.2 build the
+# other settings (finger freezing etc.) are only read when the device starts, so USB still needs a re-plug
+# (verified 2026-10-15: press-and-drag stayed broken after the reload and worked after re-plugging).
+# Bluetooth needs a trackpad power-cycle.
 USB_RELOAD_PS = ("try { $p = New-Object System.IO.Pipes.NamedPipeClientStream('.', 'AmtPtpControlPanelUsbUmInterface', 'InOut'); "
                  "$p.Connect(500); $p.WriteByte(0); $p.Flush(); $b = New-Object byte[] 2; [void]$p.Read($b, 0, 2); $p.Dispose() } catch {}")
 

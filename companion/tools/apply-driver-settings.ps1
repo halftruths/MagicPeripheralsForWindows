@@ -1,6 +1,7 @@
 # Applies the driver settings that fix stuck fingers and press-and-drag, for both connections:
 #   Bluetooth: AmtPtpHidFilter (kernel filter), re-reads when the trackpad reconnects - power-cycle it.
-#   USB:       AmtPtpDeviceUsbUm (user-mode driver), reads once when the device starts - unplug and re-plug.
+#   USB:       AmtPtpDeviceUsbUm (user-mode driver), reads once when the device starts - unplug and re-plug
+#              (its control-pipe reload only re-applies haptics in the v2.2 build).
 # (pnputil /restart-device was not enough for Bluetooth in testing.) Run from an elevated PowerShell.
 #
 #   StopPressure / StopSize = 0xFFFFFFFF  Never freeze a contact on low pressure/size. The default
@@ -37,5 +38,5 @@ try {
     $usbReloaded = $resp[0] -eq 0
 } catch {}
 Write-Output ($(if ($Revert) { 'Reverted to driver defaults.' } else { 'Applied.' }) +
-              $(if ($usbReloaded) { ' USB driver reloaded its settings.' } else { ' USB: unplug and re-plug to apply (if wired).' }) +
+              $(if ($usbReloaded) { ' USB: haptics reloaded; unplug and re-plug to apply the rest.' } else { ' USB: unplug and re-plug to apply (if wired).' }) +
               ' Bluetooth: power-cycle the trackpad to apply.')
