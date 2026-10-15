@@ -12,3 +12,5 @@ companion/settings.local.json
 companion/*.local.json
 .claude/
 companion/settings.local.json.bak
+companion/driver.local.json
+companion/driver-cache/

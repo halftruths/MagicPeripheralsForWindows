@@ -126,7 +126,9 @@ base = f"http://127.0.0.1:{srv.server_address[1]}"
 
 def call(path, body=None):
     req = urllib.request.Request(base + path, data=None if body is None else json.dumps(body).encode(),
-                                 headers={"Origin": base, "Content-Type": "application/json"})
+                                 headers={"Origin": base, "Content-Type": "application/json",
+                                          # POSTs must carry the per-run token the server injects into its pages.
+                                          "X-Companion-Token": server.TOKEN})
     try:
         with urllib.request.urlopen(req) as r:
             return r.status, json.loads(r.read())
