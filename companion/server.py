@@ -1,4 +1,4 @@
-"""Magic companion: local web app for live touchpad visualization, recording and battery status.
+"""Magic companion: local web app for live touchpad visualization, gestures, settings, recording and battery status.
 
     python companion/server.py [--port 8765]
 
@@ -6,9 +6,13 @@ Then open http://127.0.0.1:8765. Binds to localhost only.
 """
 
 import argparse
+import atexit
 import json
 import queue
+import subprocess
 import sys
+import tempfile
+import traceback
 import threading
 import time
 from datetime import datetime
@@ -19,7 +23,9 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from battery import DeviceMonitor  # noqa: E402
+from gestures import GestureEngine  # noqa: E402
 from input_capture import X_MAX, Y_MAX, InputCapture  # noqa: E402
+from settings import DRIVER_KEY, SCHEMA, Settings, driver_registry_values  # noqa: E402
 
 WEB = ROOT / "web"
 RECORDINGS = ROOT / "recordings"
@@ -33,7 +39,19 @@ class Hub:
         self.lock = threading.Lock()
         self.clients = set()
         self.recording = None  # (file, path, started)
-        self.capture = InputCapture(self.publish)
+        self.capture = InputCapture(self.on_capture)
+        self.engine = None
+
+    def on_capture(self, event):
+        if event["type"] == "frame" and self.engine:
+            try:
+                self.engine.on_frame(event)
+            except Exception:
+                traceback.print_exc()  # a gesture bug must never stop capture
+        self.publish(event)
+
+    def on_action(self, name, detail):
+        self.publish({"type": "action", "t": time.perf_counter(), "name": name, "detail": detail})
 
     def publish(self, event):
         line = json.dumps(event, separators=(",", ":"))
@@ -89,6 +107,25 @@ class Hub:
 
 hub = Hub()
 devices = DeviceMonitor()
+settings = Settings()
+hub.engine = GestureEngine(settings, hub.on_action)
+
+
+def apply_driver_settings(values):
+    """Write AmtPtpHidFilter parameters through an elevated PowerShell (UAC prompt). Returns True if written."""
+    regs = driver_registry_values(values)
+    lines = [f"$k = 'HKLM:\\{DRIVER_KEY}'", "New-Item -Path $k -Force | Out-Null"]
+    for name, value in regs.items():
+        signed = value - (1 << 32) if value >= 1 << 31 else value  # PowerShell DWord takes int32
+        lines.append(f"New-ItemProperty -Path $k -Name {name} -PropertyType DWord -Value ([int32]{signed}) -Force | Out-Null")
+    script = Path(tempfile.gettempdir()) / "magic-companion-driver.ps1"
+    script.write_text("\n".join(lines), encoding="utf-8")
+    # Start-Process throws when the UAC prompt is declined.
+    launcher = (f"try {{ $p = Start-Process powershell -Verb RunAs -Wait -PassThru "
+                f"-ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"{script}\"'; exit $p.ExitCode }} "
+                f"catch {{ exit 1223 }}")
+    proc = subprocess.run(["powershell", "-NoProfile", "-Command", launcher], capture_output=True)
+    return proc.returncode == 0
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -115,6 +152,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/recordings":
             files = sorted(RECORDINGS.glob("*.jsonl"), reverse=True) if RECORDINGS.exists() else []
             return self._json([{"name": p.name, "bytes": p.stat().st_size} for p in files])
+        if self.path == "/api/settings":
+            return self._json({"schema": SCHEMA, "values": settings.snapshot()})
         if self.path == "/api/status":
             rec = hub.recording
             return self._json({"recording": rec[1].name if rec else None, "x_max": X_MAX, "y_max": Y_MAX})
@@ -138,6 +177,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"name": hub.start_recording(self._body().get("label", ""))})
         if self.path == "/api/record/stop":
             return self._json(hub.stop_recording() or {})
+        if self.path == "/api/settings":
+            try:
+                pending = settings.update(self._body().get("changes", {}))
+            except (ValueError, OSError) as e:
+                return self._json({"error": str(e)}, 400)
+            return self._json({"values": settings.snapshot(), "driverPending": pending})
+        if self.path == "/api/driver/apply":
+            values = settings.snapshot()
+            values.update(self._body().get("changes", {}))
+            ok = apply_driver_settings(values)
+            return self._json({"ok": ok, "values": settings.snapshot()}, 200 if ok else 409)
         self._json({"error": "not found"}, 404)
 
     def _events(self):
@@ -171,6 +221,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
+    settings.apply_side_effects()
+    atexit.register(settings.restore_windows_scrolling)
+    atexit.register(hub.engine.shutdown)
     hub.capture.start()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.daemon_threads = True

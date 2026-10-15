@@ -8,3 +8,4 @@ build/result/
 /packages
 companion/recordings/
 __pycache__/
+companion/settings.local.json

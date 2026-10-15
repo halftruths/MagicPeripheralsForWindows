@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magic Companion Settings</title>
+<style>
+  :root {
+    --bg: #f6f6f4; --panel: #ffffff; --ink: #1d1d1f; --muted: #6e6e73; --line: #e2e2e0;
+    --accent: #2f6fe4; --ok: #1f9d6b; --warn: #c27a12; --bad: #d93a3a;
+    --b-windows: #2f6fe4; --b-companion: #1f9d6b; --b-driver: #c27a12;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121214; --panel: #1c1c1f; --ink: #f2f2f4; --muted: #9a9aa2; --line: #2c2c31;
+            --accent: #5c93ff; --ok: #3ccf95; --warn: #f0a043; --bad: #ff5c5c;
+            --b-windows: #5c93ff; --b-companion: #3ccf95; --b-driver: #f0a043; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  nav a { color: var(--muted); text-decoration: none; margin-right: 14px; }
+  nav a.on { color: var(--ink); font-weight: 600; }
+  .legend { margin-left: auto; display: flex; gap: 12px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .badge { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; padding: 1px 6px; border-radius: 4px;
+           border: 1px solid currentColor; white-space: nowrap; }
+  .badge.windows { color: var(--b-windows); } .badge.companion { color: var(--b-companion); } .badge.driver { color: var(--b-driver); }
+  main { padding: 16px 20px 40px; display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 16px; align-items: start; }
+  @media (max-width: 440px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 2px 0 8px; font-weight: 600; }
+  .row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
+  .row:first-of-type { border-top: 0; }
+  .row label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .row .name { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .row .help { font-size: 12px; color: var(--muted); }
+  .row.changed .name::after { content: "•"; color: var(--accent); }
+  .row.pending { background: color-mix(in srgb, var(--b-driver) 8%, transparent); }
+  .ctl { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .unit { font-size: 12px; color: var(--muted); max-width: 150px; text-align: right; }
+  input[type=number] { width: 84px; padding: 5px 7px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+                       font: inherit; font-variant-numeric: tabular-nums; text-align: right; }
+  select { padding: 5px 7px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; max-width: 210px; }
+  input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+  button { font: inherit; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); cursor: pointer; }
+  button.reset { padding: 2px 7px; color: var(--muted); }
+  button.primary { background: var(--b-driver); border-color: var(--b-driver); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  .note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+  .banner { grid-column: 1 / -1; font-size: 13px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); }
+  .banner b { font-weight: 600; }
+  #feed { grid-column: 1 / -1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 18px; }
+  #feed span { color: var(--ink); }
+  #toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+           padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Magic Companion</h1>
+  <nav><a href="/">Live view</a><a href="/settings.html" class="on">Settings</a></nav>
+  <div class="legend">
+    <span><span class="badge windows">windows</span> applies instantly</span>
+    <span><span class="badge companion">companion</span> applies instantly</span>
+    <span><span class="badge driver">driver</span> UAC + power-cycle</span>
+  </div>
+</header>
+<main id="main">
+  <div class="banner" id="banner">Loading…</div>
+  <div id="feed">Last gesture: <span id="lastAction">none yet</span></div>
+</main>
+<div id="toast"></div>
+<script>
+const $ = id => document.getElementById(id);
+let schema = [], values = {}, pendingDriver = {};
+
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2200); }
+
+function fmt(spec, v) { return spec.kind === "float" ? Number(v).toFixed(spec.step < 1 ? (String(spec.step).split(".")[1] || "").length : 0) : v; }
+
+function control(spec) {
+  const v = spec.key in pendingDriver ? pendingDriver[spec.key] : values[spec.key];
+  if (spec.kind === "bool") return `<input type="checkbox" data-key="${spec.key}" ${v ? "checked" : ""}>`;
+  if (spec.kind === "choice") return `<select data-key="${spec.key}">${spec.choices.map(([val, label]) => `<option value="${val}" ${val === v ? "selected" : ""}>${label}</option>`).join("")}</select>`;
+  return `<input type="number" data-key="${spec.key}" value="${fmt(spec, v)}" min="${spec.min ?? ""}" max="${spec.max ?? ""}" step="${spec.step ?? "any"}">`
+       + (spec.unit ? `<span class="unit">${spec.unit}</span>` : "");
+}
+
+function render() {
+  const groups = [...new Set(schema.map(s => s.group))];
+  const main = $("main");
+  main.querySelectorAll(".card").forEach(c => c.remove());
+  for (const g of groups) {
+    const card = document.createElement("section");
+    card.className = "card";
+    const rows = schema.filter(s => s.group === g).map(s => {
+      const current = s.key in pendingDriver ? pendingDriver[s.key] : values[s.key];
+      const changed = current !== s.default;
+      return `<div class="row ${changed ? "changed" : ""} ${s.key in pendingDriver ? "pending" : ""}" data-row="${s.key}">
+        <label><span class="name">${s.label} <span class="badge ${s.backend}">${s.backend}</span></span>${s.help ? `<span class="help">${s.help}</span>` : ""}</label>
+        <div class="ctl">${control(s)}</div>
+        <button class="reset" data-reset="${s.key}" title="Reset to default (${s.kind === "choice" ? s.choices.find(c => c[0] === s.default)[1] : s.default})" ${changed ? "" : "disabled"}>↺</button>
+      </div>`;
+    }).join("");
+    const driverBtn = schema.some(s => s.group === g && s.backend === "driver")
+      ? `<div class="row"><span class="note">Driver changes need admin approval, then power-cycle the trackpad (button on its side).</span><span></span>
+         <button class="primary" data-apply-driver ${Object.keys(pendingDriver).length ? "" : "disabled"}>Apply driver settings</button></div>` : "";
+    card.innerHTML = `<h2>${g}</h2>${rows}${driverBtn}`;
+    main.appendChild(card);
+  }
+  updateBanner();
+}
+
+function updateBanner() {
+  const mode = values["scroll.mode"];
+  const parts = [];
+  parts.push(mode === "companion" ? "<b>Scrolling:</b> companion engine. Windows' own scrolling is turned off while the companion runs and turned back on when it exits."
+           : mode === "off" ? "<b>Scrolling:</b> off." : "<b>Scrolling:</b> Windows (native).");
+  if (values["native.disableMultiFinger"]) parts.push("Windows' own 3/4-finger gestures are off so they don't double-fire; if they still trigger, sign out and back in once.");
+  const nPending = Object.keys(pendingDriver).length;
+  if (nPending) parts.push(`<b>${nPending} driver change${nPending > 1 ? "s" : ""} not applied yet.</b>`);
+  $("banner").innerHTML = parts.join(" ");
+}
+
+async function save(key, value) {
+  const spec = schema.find(s => s.key === key);
+  if (spec.backend === "driver") {
+    if (value === values[key]) delete pendingDriver[key]; else pendingDriver[key] = value;
+    render();
+    return;
+  }
+  const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ changes: { [key]: value } }) });
+  const body = await r.json();
+  if (!r.ok) { toast(body.error || "Failed to save"); return; }
+  values = body.values;
+  render();
+  toast(`${spec.label}: saved`);
+}
+
+function readControl(el) {
+  const spec = schema.find(s => s.key === el.dataset.key);
+  if (spec.kind === "bool") return el.checked;
+  if (spec.kind === "choice") return el.value;
+  const n = spec.kind === "int" ? parseInt(el.value, 10) : parseFloat(el.value);
+  return Number.isFinite(n) ? Math.min(spec.max ?? n, Math.max(spec.min ?? n, n)) : values[spec.key];
+}
+
+$("main").addEventListener("change", e => { if (e.target.dataset.key) save(e.target.dataset.key, readControl(e.target)); });
+$("main").addEventListener("click", async e => {
+  const key = e.target.dataset.reset;
+  if (key) return save(key, schema.find(s => s.key === key).default);
+  if ("applyDriver" in e.target.dataset) {
+    e.target.disabled = true; e.target.textContent = "Waiting for UAC…";
+    const r = await fetch("/api/driver/apply", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ changes: pendingDriver }) });
+    const body = await r.json();
+    if (r.ok) { values = body.values; pendingDriver = {}; toast("Driver settings written. Power-cycle the trackpad to apply."); }
+    else toast("Driver settings not written (UAC declined?)");
+    render();
+  }
+});
+
+async function load() {
+  const r = await fetch("/api/settings");
+  const body = await r.json();
+  schema = body.schema; values = body.values;
+  render();
+}
+
+const es = new EventSource("/events");
+es.onmessage = m => {
+  const e = JSON.parse(m.data);
+  if (e.type === "action") $("lastAction").textContent = `${e.name}${e.detail ? " → " + e.detail : ""} (${new Date().toLocaleTimeString()})`;
+};
+
+load();
+</script>
+</body>
+</html>

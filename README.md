@@ -6,8 +6,8 @@ Built on [vitoplantamura/MagicTrackpad2ForWindows](https://github.com/vitoplanta
 
 What this repo adds so far:
 
-- `companion/`: a local web app (`python companion/server.py`, then open http://127.0.0.1:8765) with a live touch visualizer, a scroll timeline, session recording, and Bluetooth connection/battery status. Python standard library only.
-- `companion/tools/`: `hidprobe.py` (dumps Apple HID collections and reports), `analyze.py` (finds frozen contacts, tip flicker, broken press-and-drag and collapsed diagonal scrolls in recordings) and `apply-driver-settings.ps1` (driver settings that fix stuck fingers and press-and-drag).
+- `companion/`: a local web app (`python companion/server.py`, then open http://127.0.0.1:8765) with a live touch visualizer, a scroll timeline, session recording, Bluetooth connection/battery status, a gesture engine (3-finger tap/drag with drag lock, 4-finger swipes/tap, back/forward flick, optional own 2-finger scrolling with free diagonals, acceleration and inertia) and a settings page with numeric values for Windows, companion and driver settings. Python standard library only.
+- `companion/tools/`: `hidprobe.py` (dumps Apple HID collections and reports), `analyze.py` (finds frozen contacts, tip flicker, broken press-and-drag and collapsed diagonal scrolls in recordings), `test_gestures.py` (synthetic-frame tests for the gesture engine) and `apply-driver-settings.ps1` (driver settings that fix stuck fingers and press-and-drag).
 
 The driver source is currently unchanged from upstream. Until this repo publishes its own builds, install the signed driver from [upstream's releases](https://github.com/vitoplantamura/MagicTrackpad2ForWindows/releases).
 
