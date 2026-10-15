@@ -23,10 +23,11 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
+from alerts import BatteryAlerts  # noqa: E402
 from battery import DeviceMonitor  # noqa: E402
 from gestures import GestureEngine  # noqa: E402
 from input_capture import X_MAX, Y_MAX, InputCapture  # noqa: E402
-from settings import DRIVER_KEYS, SCHEMA, Settings, driver_registry_values  # noqa: E402
+from settings import DRIVER_KEYS, DEVICES, Settings, driver_registry_values, schema_for  # noqa: E402
 
 WEB = ROOT / "web"
 RECORDINGS = ROOT / "recordings"
@@ -113,7 +114,7 @@ class Hub:
 hub = Hub()
 devices = DeviceMonitor()
 settings = Settings()
-hub.engine = GestureEngine(settings, hub.on_action)
+hub.engine = GestureEngine(settings.view("trackpad"), hub.on_action)
 
 
 # The USB driver re-reads its settings when sent command 0x00 on its admin-only control pipe, so wired changes
@@ -168,8 +169,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/recordings":
             files = sorted(RECORDINGS.glob("*.jsonl"), reverse=True) if RECORDINGS.exists() else []
             return self._json([{"name": p.name, "bytes": p.stat().st_size} for p in files])
-        if self.path == "/api/settings":
-            return self._json({"schema": SCHEMA, "values": settings.snapshot()})
+        if url.path == "/api/settings":
+            device = (parse_qs(url.query).get("device") or ["trackpad"])[0]
+            if device not in DEVICES:
+                return self._json({"error": f"unknown device {device}"}, 400)
+            return self._json({"device": device, "schema": schema_for(device), "values": settings.snapshot(device)})
         if self.path == "/api/status":
             rec = hub.recording
             return self._json({"recording": rec[1].name if rec else None, "x_max": X_MAX, "y_max": Y_MAX})
@@ -194,11 +198,13 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/record/stop":
             return self._json(hub.stop_recording() or {})
         if self.path == "/api/settings":
+            body = self._body()
+            device = body.get("device") or "trackpad"
             try:
-                pending = settings.update(self._body().get("changes", {}))
+                pending = settings.update(device, body.get("changes", {}))
             except (ValueError, OSError) as e:
                 return self._json({"error": str(e)}, 400)
-            return self._json({"values": settings.snapshot(), "driverPending": pending})
+            return self._json({"device": device, "values": settings.snapshot(device), "driverPending": pending})
         if self.path == "/api/driver/apply":
             values = settings.snapshot()
             values.update(self._body().get("changes", {}))
@@ -240,6 +246,7 @@ def main():
     settings.apply_side_effects()
     atexit.register(settings.restore_windows_scrolling)
     atexit.register(hub.engine.shutdown)
+    BatteryAlerts(devices.status, settings, hub.publish).start()
     hub.capture.start()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.daemon_threads = True
