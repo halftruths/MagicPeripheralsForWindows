@@ -94,7 +94,8 @@
   body.basic .slot { height: auto; }
   body.basic .slot > .card { position: relative; height: auto; overflow: visible; }
   body.basic .foot { display: none !important; }
-  button.moreadv { display: block; margin: 6px 0 0 -9px; padding: 2px 9px; border-color: transparent; font-size: 12px; color: var(--muted); border-radius: 999px; }
+  body.basic .card { padding-bottom: 2px; }   /* basic view: no trailing gap under the last row / "+N more" line */
+  button.moreadv { display: block; margin: 2px 0 0 -9px; padding: 2px 9px; border-color: transparent; font-size: 12px; color: var(--muted); border-radius: 999px; }
   button.moreadv:hover { color: var(--ink); background: var(--sel); }
   .popover label.chk { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 </style>
@@ -203,9 +204,11 @@ function cardHtml(g, grid) {
       <button class="reset" data-reset="${s.key}" title="Reset to default (${s.kind === "choice" ? s.choices.find(c => c[0] === s.default)[1] : s.default})" ${changed ? "" : "disabled"}>↺</button>
     </div>`;
   }).join("");
-  const driverBtn = schema.some(s => s.group === g && s.backend === "driver")
-    ? `<div class="row"><span class="note">Driver changes need admin approval, then power-cycle the trackpad (button on its side).</span><span></span>
-       <button class="primary" data-apply-driver ${Object.keys(pendingDriver).length ? "" : "disabled"}>Apply driver settings</button></div>` : "";
+  // Basic view: no explanatory driver note; the Apply button only appears while a driver change is pending.
+  const pendingN = Object.keys(pendingDriver).length;
+  const driverBtn = !schema.some(s => s.group === g && s.backend === "driver") || (!advanced && !pendingN) ? ""
+    : `<div class="row">${advanced ? '<span class="note">Driver changes need admin approval, then power-cycle the trackpad (button on its side).</span>' : "<span></span>"}<span></span>
+       <button class="primary" data-apply-driver ${pendingN ? "" : "disabled"}>Apply driver settings</button></div>`;
   return `<div class="slot" data-g="${g}"><section class="card"><div class="chead"><h2>${g}</h2><button class="collapse" data-collapse title="Collapse (Esc)">Collapse</button></div>${GROUP_NOTES[g] ? `<p class="sub">${GROUP_NOTES[g]}</p>` : ""}<div class="rows${grid ? " grid" : ""}">${rows}</div>${hiddenN ? `<button class="moreadv" data-adv>+${hiddenN} more in Advanced</button>` : ""}${driverBtn}<div class="foot"><button data-showall>Show all</button></div></section></div>`;
 }
 
