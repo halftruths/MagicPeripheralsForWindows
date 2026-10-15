@@ -48,16 +48,17 @@
   const ICON_USB = svg('<rect x="2.5" y="8" width="19" height="8" rx="4"/><line x1="7" y1="12" x2="17" y2="12"/>');
 
   const deviceListeners = [];
-  // Pages can make the status-bar chips a device selector (settings uses this): the selected chip gets a
-  // white ring and clicking/Enter on a chip calls onSelect(id).
-  const picker = { onSelect: null, selected: null };
+  // Status-bar chips are always clickable: by default they open that device's settings. The settings page
+  // turns them into an in-place selector via MC.selectDevices (the selected chip gets the soft --sel fill).
+  const openSettings = id => { location.href = `/settings?device=${encodeURIComponent(id)}`; };
+  const picker = { onSelect: openSettings, selected: null };
   function renderChips(list) {
     const selectable = !!picker.onSelect;
     $devs.innerHTML = list.map(d => {
       const name = esc(d.device);
-      const sel = selectable && d.id === picker.selected;
+      const sel = selectable && picker.selected != null && d.id === picker.selected;
       const attrs = ` data-dev="${esc(d.id || "")}"` + (selectable
-        ? ` role="button" tabindex="0" aria-pressed="${sel}" aria-label="Edit ${name} settings"` : "");
+        ? ` role="button" tabindex="0"${picker.selected != null ? ` aria-pressed="${sel}"` : ""} aria-label="Open ${name} settings"` : "");
       const cls = (selectable ? " selectable" : "") + (sel ? " selected" : "");
       if (d.connected) {
         const usb = d.transport === "usb";
