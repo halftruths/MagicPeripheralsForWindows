@@ -19,10 +19,33 @@
   @media (max-width: 1300px) { .cards.c4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 1100px) { .cards.c3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 700px) { .cards.c4, .cards.c3 { grid-template-columns: minmax(0, 1fr); } }
+  /* Fixed tile heights per section: the grid never reflows because of content. Tune here. */
+  :root { --tile-h-gestures: 420px; --tile-h-click: 304px; --tile-h-scroll: 304px; --tile-h-other: 304px; }
+  .cards.c4 { --tile-h: var(--tile-h-gestures); }
+  .cards.c3 { --tile-h: var(--tile-h-click); }
+  .cards.c1 { --tile-h: var(--tile-h-scroll); }
+  .cards.other { --tile-h: var(--tile-h-other); }
+  main { position: relative; z-index: 1; isolation: isolate; } /* raised cards stay below the fixed bars (z 50) and popover/toast */
+  .slot { position: relative; height: var(--tile-h); }
+  .slot > .card { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: clip;
+                  transition: box-shadow .18s, border-color .18s; }
+  .slot > .card.clipped { cursor: pointer; }
+  .slot > .card.raised { height: auto; min-height: 100%; overflow: visible; cursor: default; border-color: var(--accent);
+                         box-shadow: 0 14px 40px rgba(0,0,0,.28), 0 2px 8px rgba(0,0,0,.18); }
+  .chead { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
+  .chead h2 { margin: 2px 0 8px; }
+  button.collapse { display: none; padding: 1px 9px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .card.raised button.collapse { display: inline-block; }
+  .foot { display: none; position: absolute; left: 0; right: 0; bottom: 0; height: 44px; padding: 0 14px 8px; align-items: flex-end;
+          justify-content: flex-end; pointer-events: none; border-radius: 0 0 12px 12px;
+          background: linear-gradient(to top, var(--panel) 38%, color-mix(in srgb, var(--panel) 0%, transparent)); }
+  .card.clipped:not(.raised) .foot { display: flex; }
+  .foot button { pointer-events: auto; padding: 2px 10px; font-size: 12px; color: var(--muted); border-radius: 999px; }
+  .foot button:hover { color: var(--ink); border-color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { .slot > .card { transition: none; } }
   .card { padding: 12px 14px; }
   .card .sub { font-size: 12px; color: var(--muted); margin: -4px 0 6px; }
-  .card h2 { margin: 2px 0 8px; }
-  .rows.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 28px; }
+    .rows.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 28px; }
   @media (max-width: 1300px) { .rows.grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   @media (max-width: 700px) { .rows.grid { grid-template-columns: minmax(0, 1fr); } }
   .row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
@@ -92,6 +115,7 @@ document.body.classList.toggle("hide-help", !showHelp);
 $("showHelp").onchange = e => {
   document.body.classList.toggle("hide-help", !e.target.checked);
   try { localStorage.setItem("showHelp", e.target.checked ? "1" : "0"); } catch {}
+  layout();
 };
 
 const toast = msg => MC.toast(msg);
@@ -120,7 +144,7 @@ function cardHtml(g, grid) {
   const driverBtn = schema.some(s => s.group === g && s.backend === "driver")
     ? `<div class="row"><span class="note">Driver changes need admin approval, then power-cycle the trackpad (button on its side).</span><span></span>
        <button class="primary" data-apply-driver ${Object.keys(pendingDriver).length ? "" : "disabled"}>Apply driver settings</button></div>` : "";
-  return `<section class="card"><h2>${g}</h2>${GROUP_NOTES[g] ? `<p class="sub">${GROUP_NOTES[g]}</p>` : ""}<div class="rows${grid ? " grid" : ""}">${rows}</div>${driverBtn}</section>`;
+  return `<div class="slot" data-g="${g}"><section class="card"><div class="chead"><h2>${g}</h2><button class="collapse" data-collapse title="Collapse (Esc)">Collapse</button></div>${GROUP_NOTES[g] ? `<p class="sub">${GROUP_NOTES[g]}</p>` : ""}<div class="rows${grid ? " grid" : ""}">${rows}</div>${driverBtn}<div class="foot"><button data-showall>Show all</button></div></section></div>`;
 }
 
 function render() {
@@ -129,10 +153,63 @@ function render() {
   const sections = [...SECTIONS, { title: "Other", cls: "c3", groups: [...present].filter(g => !known.has(g)) }];
   $("main").innerHTML = sections.map(sec => {
     const gs = sec.groups.filter(g => present.has(g));
-    return gs.length ? `<div class="section"><h2 class="sec">${sec.title}</h2><div class="cards ${sec.cls}">${gs.map(g => cardHtml(g, sec.grid)).join("")}</div></div>` : "";
+    return gs.length ? `<div class="section"><h2 class="sec">${sec.title}</h2><div class="cards ${sec.cls}${sec.title === "Other" ? " other" : ""}">${gs.map(g => cardHtml(g, sec.grid)).join("")}</div></div>` : "";
   }).join("");
   updateNotes();
+  layout();
 }
+
+// ---- Fixed-size tiles: clipped cards can be raised (overlap in place) to show everything. ----
+let raised = []; // group names, last = top-most; survives render()
+const FOOT = 34;
+function layout() {
+  const now = [];
+  document.querySelectorAll(".slot").forEach(slot => {
+    const card = slot.firstElementChild, g = slot.dataset.g;
+    const slotH = slot.clientHeight;
+    const over = card.scrollHeight > slotH + 1;
+    const cardTop = card.getBoundingClientRect().top;
+    const hidden = [...card.querySelectorAll(".row")].filter(r => r.getBoundingClientRect().bottom - cardTop > slotH - FOOT).length;
+    card.classList.toggle("clipped", over);
+    const isRaised = over && raised.includes(g);
+    card.classList.toggle("raised", isRaised);
+    if (isRaised) now.push(g);
+    const btn = card.querySelector("[data-showall]");
+    if (btn) btn.textContent = hidden ? `Show all · ${hidden} more` : "Show all";
+  });
+  raised = raised.filter(g => now.includes(g));
+  document.querySelectorAll(".slot").forEach(slot => {
+    const i = raised.indexOf(slot.dataset.g);
+    slot.firstElementChild.style.zIndex = i < 0 ? "" : 10 + i;
+  });
+}
+function raise(g) { raised = raised.filter(x => x !== g); raised.push(g); layout(); }
+function collapse(g) { raised = raised.filter(x => x !== g); layout(); }
+const INTERACTIVE = "input, select, textarea, button, a";
+$("main").addEventListener("click", e => {
+  const card = e.target.closest(".card");
+  if (!card) return;
+  const g = card.parentElement.dataset.g;
+  if (e.target.closest("[data-collapse]")) return collapse(g);
+  if (e.target.closest("[data-showall]")) return raise(g);
+  if (e.target.closest(INTERACTIVE)) { if (raised.includes(g) && raised[raised.length - 1] !== g) raise(g); return; }
+  if (card.classList.contains("clipped") || raised.includes(g)) raise(g);
+});
+$("main").addEventListener("focusin", e => {
+  const card = e.target.closest(".card");
+  if (!card || card.classList.contains("raised") || !card.classList.contains("clipped")) return;
+  const slot = card.parentElement;
+  const r = e.target.getBoundingClientRect(), c = card.getBoundingClientRect();
+  if (r.bottom > c.top + slot.clientHeight - FOOT) raise(slot.dataset.g);
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && raised.length && !document.querySelector(".popover.open")) collapse(raised[raised.length - 1]);
+}, true);
+document.addEventListener("click", e => {
+  if (raised.length && !e.target.closest(".card, .bar, .popover, .keybtn, #toast")) { raised = []; layout(); }
+});
+let layoutQueued = false;
+window.addEventListener("resize", () => { if (layoutQueued) return; layoutQueued = true; requestAnimationFrame(() => { layoutQueued = false; layout(); }); });
 
 function updateNotes() {
   const mode = values["scroll.mode"];
