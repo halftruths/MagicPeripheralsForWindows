@@ -1,3 +1,18 @@
+// Same-origin non-GET requests carry the per-run token the server injected into this page (see server.py).
+(() => {
+  const token = document.querySelector('meta[name="mc-token"]')?.content;
+  const orig = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    const url = new URL(input instanceof Request ? input.url : input, location.href);
+    const method = (init.method || (input instanceof Request ? input.method : "GET")).toUpperCase();
+    if (token && url.origin === location.origin && method !== "GET" && method !== "HEAD") {
+      const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+      headers.set("X-Companion-Token", token);
+      init = { ...init, headers };
+    }
+    return orig(input, init);
+  };
+})();
 // Shared chrome for all companion pages: top bar (title + nav), bottom status bar (server + devices),
 // transient toast (also used for gesture actions) and dropdown wiring.
 (() => {

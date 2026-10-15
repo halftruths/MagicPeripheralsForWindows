@@ -9,6 +9,7 @@ import argparse
 import atexit
 import json
 import queue
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
+import drivers  # noqa: E402
 from battery import DeviceMonitor  # noqa: E402
 from gestures import GestureEngine  # noqa: E402
 from input_capture import X_MAX, Y_MAX, InputCapture  # noqa: E402
@@ -114,6 +116,11 @@ hub = Hub()
 devices = DeviceMonitor()
 settings = Settings()
 hub.engine = GestureEngine(settings, hub.on_action)
+drivers.set_publisher(hub.publish)
+
+# Per-run secret injected into served pages (<meta name="mc-token">); every POST must echo it in X-Companion-Token, so a
+# page on another origin (or a stray local process that never loaded our HTML) cannot drive the API.
+TOKEN = secrets.token_urlsafe(32)
 
 
 # The USB driver re-reads its settings when sent command 0x00 on its admin-only control pipe, so wired changes
@@ -158,8 +165,35 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         return json.loads(self.rfile.read(length) or b"{}")
 
+    def _host_ok(self):
+        # DNS-rebinding defence: only answer requests addressed to our own loopback name and port.
+        port = self.server.server_address[1]
+        return self.headers.get("Host") in (f"127.0.0.1:{port}", f"localhost:{port}")
+
+    def _post_ok(self):
+        """Origin/token/content-type checks for every POST; sends the error response itself and returns False on failure."""
+        port = self.server.server_address[1]
+        origin = self.headers.get("Origin")
+        error = None
+        if origin and origin not in (f"http://127.0.0.1:{port}", f"http://localhost:{port}"):
+            error = (403, "forbidden origin")
+        elif self.path.startswith("/api/drivers/") and not origin:
+            error = (403, "origin required")
+        elif not secrets.compare_digest(self.headers.get("X-Companion-Token", "").encode(), TOKEN.encode()):
+            error = (403, "missing or wrong token")
+        elif int(self.headers.get("Content-Length") or 0) and not (self.headers.get("Content-Type") or "").lower().startswith("application/json"):
+            error = (415, "JSON body required")
+        if error:
+            self._json({"error": error[1]}, error[0])
+        return error is None
+
     def do_GET(self):
+        if not self._host_ok():
+            return self._json({"error": "forbidden host"}, 403)
         url = urlparse(self.path)
+        if url.path.startswith("/api/drivers"):
+            status, obj = drivers.api_get(url.path)
+            return self._json(obj, status)
         if url.path == "/events":
             only = parse_qs(url.query).get("only")
             return self._events(set(only[0].split(",")) if only else None)
@@ -178,6 +212,8 @@ class Handler(BaseHTTPRequestHandler):
         if WEB not in file.parents or not file.is_file():
             return self._json({"error": "not found"}, 404)
         body = file.read_bytes()
+        if file.suffix == ".html":
+            body = body.replace(b"</head>", f'<meta name="mc-token" content="{TOKEN}"></head>'.encode(), 1)
         self.send_response(200)
         self.send_header("Content-Type", CONTENT_TYPES.get(file.suffix, "application/octet-stream"))
         self.send_header("Content-Length", str(len(body)))
@@ -185,10 +221,17 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
-        # Browsers send Origin on cross-site POSTs; reject anything not from this app.
-        origin = self.headers.get("Origin")
-        if origin and not origin.startswith(("http://127.0.0.1:", "http://localhost:")):
-            return self._json({"error": "forbidden"}, 403)
+        if not self._host_ok():
+            return self._json({"error": "forbidden host"}, 403)
+        if not self._post_ok():
+            return
+        if self.path.startswith("/api/drivers/"):
+            try:
+                body = self._body()
+            except ValueError:
+                return self._json({"error": "bad JSON"}, 400)
+            status, obj = drivers.api_post(self.path, body)
+            return self._json(obj, status)
         if self.path == "/api/record/start":
             return self._json({"name": hub.start_recording(self._body().get("label", ""))})
         if self.path == "/api/record/stop":

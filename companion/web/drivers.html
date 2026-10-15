@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Magic Companion Drivers</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  .muted { color: var(--muted); }
+  .pagehead .note { font-size: 13px; color: var(--muted); }
+  .dot.muted { background: var(--hover); } .dot.warn { background: var(--warn); } .dot.info { background: var(--hover); }
+  /* The page fits the viewport; each column scrolls on its own so the page itself never does. */
+  main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 16px; padding: 12px 20px 16px;
+         height: calc(100vh - var(--topbar-h) - var(--botbar-h) - 52px); }
+  .col { display: flex; flex-direction: column; gap: 16px; min-height: 0; overflow: auto; padding-right: 2px; }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); overflow: auto; } .col { overflow: visible; } }
+  .card { flex: none; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; margin: 0; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .status { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; font-weight: 600; }
+  .status small { font-weight: 400; color: var(--muted); }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--bad); }
+  button.small { padding: 2px 9px; font-size: 12px; }
+  .confirm { margin-top: 12px; border: 1px solid var(--warn); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+  .confirm p { margin: 0 0 8px; }
+  .progress { margin-top: 12px; font-size: 13px; }
+  .steps { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+  .steps span { padding: 1px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .steps span.on { color: var(--ink); border-color: var(--accent); font-weight: 600; }
+  .steps span.fail { color: var(--bad); border-color: var(--bad); }
+  .group + .group { margin-top: 14px; }
+  .group h3 { margin: 0 0 2px; font-size: 13px; }
+  .group .hint { margin: 0 0 4px; }
+  .drow { display: grid; grid-template-columns: 14px 1fr auto; gap: 4px 8px; padding: 7px 0; border-top: 1px solid var(--line); align-items: start; }
+  .drow .dot { margin-top: 6px; }
+  .drow .meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+  .drow .meta b { color: var(--ink); font-weight: 600; }
+  .list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+  .list li { display: grid; grid-template-columns: 14px 1fr; gap: 8px; align-items: start; }
+  .list li .dot { margin-top: 6px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  pre.log { margin: 8px 0 0; max-height: 220px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+            padding: 8px 10px; font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .popover button.wide { width: 100%; text-align: left; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="pagehead">
+  <h1>Drivers</h1>
+  <span class="note" id="headnote">Loading…</span>
+  <div class="rel keygroup">
+    <button class="chevron" data-pop="morepop" aria-label="More options" aria-expanded="false" aria-haspopup="true"></button>
+    <div class="popover" id="morepop">
+      <h3>Release check</h3>
+      <p class="muted" id="checkinfo">Not checked yet.</p>
+      <button class="wide" id="checkNow">Check for updates now</button>
+      <h3>Source</h3>
+      <p><a href="https://github.com/vitoplantamura/MagicTrackpad2ForWindows/releases" target="_blank" rel="noopener">vitoplantamura/MagicTrackpad2ForWindows releases</a></p>
+      <p class="muted">Only Microsoft-signed releases are offered. Downloads are checked against GitHub's SHA-256 and the Microsoft Windows Hardware Compatibility Publisher signature before anything is installed.</p>
+    </div>
+  </div>
+</div>
+<main>
+  <div class="col">
+    <section class="card" id="pkg"><h2>Driver package</h2><p class="muted">Loading…</p></section>
+    <section class="card" id="env"><h2>Environment</h2></section>
+  </div>
+  <div class="col">
+    <section class="card" id="devs"><h2>Devices</h2></section>
+    <section class="card" id="last"><h2>Last action</h2></section>
+  </div>
+</main>
+<script src="/common.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = MC.esc;
+const STEPS = [["downloading", "Download"], ["verifying", "Verify"], ["awaiting_uac", "Approve"], ["installing", "Install"], ["done", "Done"]];
+let snap = null, confirmState = null, pollTimer = null, watching = null, applied = false;
+
+const ago = t => {
+  const s = Math.max(0, Date.now() / 1000 - t);
+  return s < 60 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 172800 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} days ago`;
+};
+async function api(path, method = "GET", body) {
+  const r = await fetch(path, method === "GET" ? undefined : { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  let data = {};
+  try { data = await r.json(); } catch {}
+  return { ok: r.ok, status: r.status, data };
+}
+
+function statusInfo(s) {
+  const rel = s.release;
+  const when = s.checked_at ? `checked ${ago(s.checked_at)}` : "never checked";
+  const err = s.check_error ? ` · ${s.check_error}${s.checked_at ? `, showing the result from ${ago(s.checked_at)}` : ""}` : "";
+  const map = {
+    current: ["on", "Up to date"], probably_current: ["on", "Probably up to date"], update: ["warn", "Update available"],
+    unchecked: ["muted", s.check_error ? "Could not check for updates" : "Not checked yet"],
+    not_installed: ["muted", "Driver not installed"], unknown: ["muted", "Version could not be compared"],
+  };
+  const [cls, text] = map[s.status] || map.unknown;
+  return { cls, text, small: `${when}${err}`, rel };
+}
+
+function renderPkg() {
+  const s = snap, inst = s.installed, st = statusInfo(s), rel = s.release;
+  const busy = s.busy;
+  let h = "<h2>Driver package</h2>";
+  h += `<dl class="kv"><dt>Installed</dt><dd>${inst
+    ? `<b>${esc(inst.version || "?")}</b>${inst.date ? ` · ${esc(inst.date)}` : ""}<br><span class="muted">${esc(inst.oem)} (${esc(inst.inf)}) · ${esc(inst.provider)}<br>signed by ${esc(inst.signer || "unknown")}</span>`
+    : '<span class="muted">none</span>'}</dd>`;
+  h += `<dt>Latest</dt><dd>${rel
+    ? `<b>${esc(rel.tag)}</b> · ${esc((rel.published || "").slice(0, 10))}<br><span class="muted">${esc(rel.asset)}${rel.installable ? "" : " · no SHA-256 published, install disabled"}</span>`
+    : '<span class="muted">unknown</span>'}</dd></dl>`;
+  h += `<div class="status"><span class="dot ${st.cls}"></span>${st.text}<small>${esc(st.small)}</small></div>`;
+  if (s.extra_packages.length) h += `<p class="hint">Older Magic driver packages are still in the driver store: ${s.extra_packages.map(p => esc(p.oem)).join(", ")}.</p>`;
+  if (s.dry_run) h += '<p class="hint"><b>Dry run:</b> actions stop before the administrator step and change nothing.</p>';
+  const canInstall = rel && rel.installable && !busy;
+  const label = !inst ? `Install ${rel ? esc(rel.tag) : ""}` : s.status === "update" ? `Update to ${esc(rel.tag)}` : "Install latest";
+  h += `<div class="btns">
+    <button class="primary" data-ask="install" ${canInstall ? "" : "disabled"}>${label}</button>
+    <button data-ask="reinstall" ${canInstall && inst ? "" : "disabled"}>Reinstall</button>
+    <button class="danger" data-ask="uninstall" ${inst && !busy ? "" : "disabled"}>Uninstall</button>
+    <button data-check ${busy ? "disabled" : ""}>Check now</button></div>`;
+  if (confirmState && !busy) h += confirmHtml();
+  h += progressHtml();
+  $("pkg").innerHTML = h;
+}
+
+function confirmHtml() {
+  const c = confirmState, rel = snap.release, rb = snap.cached_zips.length;
+  const uac = "Windows will ask for administrator approval once.";
+  let text;
+  if (c.kind === "install") text = `Download ${esc(rel.asset)} from GitHub, check its SHA-256 and Microsoft signature, then install it. ${uac}`;
+  else if (c.kind === "reinstall") text = `Remove and reinstall the package from ${esc(rel.tag)} (checked the same way). The trackpad may stop working for a moment. ${uac}`;
+  else if (c.kind === "uninstall") text = `Remove ${esc(snap.installed.oem)}. Windows falls back to its inbox driver, so gestures and the precision touchpad features stop. ` +
+    (rb ? `A verified copy is cached (${snap.cached_zips.map(z => esc(z.tag)).join(", ")}), so you can reinstall it offline.` : "<b>There is no rollback:</b> no verified copy is cached, reinstalling needs a download.") + ` ${uac}`;
+  else if (c.kind === "restart") text = `Restart ${esc(c.label)}. Bluetooth trackpads need a power-cycle (button on the side) and USB ones a re-plug before they re-read driver settings; a restart alone does not. ${uac}`;
+  else text = `Write the driver settings from the Settings page to the registry. ${uac}`;
+  return `<div class="confirm"><p>${text}</p><button class="${c.kind === "uninstall" ? "danger" : "primary"}" data-go>${c.kind === "uninstall" ? "Uninstall" : "Continue"}</button> <button data-cancel>Cancel</button></div>`;
+}
+
+function progressHtml() {
+  const a = snap.action;
+  if (!a || !a.state || a.state === "queued") return "";
+  if (!watching && !snap.busy && Date.now() / 1000 - (a.finished || 0) > 300) return "";
+  const idx = STEPS.findIndex(x => x[0] === a.state);
+  const steps = STEPS.map(([k, l], i) => `<span class="${a.state === "failed" ? "" : i === idx ? "on" : ""}">${l}</span>`).join("");
+  const failed = a.state === "failed" ? `<span class="fail" style="padding:1px 9px;border:1px solid var(--bad);border-radius:999px;font-size:12px">Failed</span>` : "";
+  let h = `<div class="progress"><div class="steps">${steps}${failed}</div><div>${esc(a.detail || "")}</div>`;
+  if (a.state === "done" && a.kind === "install" || a.state === "done" && a.kind === "reinstall") {
+    h += `<div class="btns"><button class="primary" data-apply-settings ${applied ? "disabled" : ""}>Apply driver settings</button></div>
+          <p class="hint">Your saved driver settings are written to the registry (another approval prompt). Bluetooth: power-cycle the trackpad afterwards; USB: re-plug.</p>`;
+  }
+  return h + "</div>";
+}
+
+function renderDevs() {
+  let h = "<h2>Devices</h2>";
+  if (!snap.groups.length) h += '<p class="muted">No Magic Trackpad or Keyboard found. Pair or plug one in.</p>';
+  h += snap.groups.map(g => `<div class="group"><h3>${esc(g.title)}</h3><p class="hint">${esc(g.hint)}${g.connected ? "" : " · not connected right now"}</p>` +
+    g.rows.map(r => {
+      const cls = { ok: "on", problem: "", warn: "warn", muted: "muted" }[r.state];
+      const meta = r.present || r.inf ? `<b>${esc(r.inf || "no driver")}</b>${r.service ? ` · ${esc(r.service)}` : ""}${r.version ? ` · ${esc(r.version)}` : ""}` : "";
+      const restart = r.present && r.ours && g.id !== "kb-bt" ? `<button class="small" data-restart="${esc(r.instanceId)}" data-label="${esc(g.title.toLowerCase())}: ${esc(r.label)}" ${snap.busy ? "disabled" : ""}>Restart</button>` : "<span></span>";
+      return `<div class="drow"><span class="dot ${cls}"></span><div><div>${esc(r.label)}</div><div class="meta">${meta}</div><div class="meta">${esc(r.note)}</div></div>${restart}</div>`;
+    }).join("") + "</div>").join("");
+  if (snap.probe_error) h += `<p class="hint">Last device scan failed: ${esc(snap.probe_error)}</p>`;
+  $("devs").innerHTML = h;
+}
+
+function renderEnv() {
+  let h = "<h2>Environment</h2><ul class=\"list\">";
+  h += snap.environment.map(e => `<li><span class="dot ${e.level === "warn" ? "warn" : "info"}"></span><div><b>${esc(e.title)}</b><div class="muted">${esc(e.text)}</div></div></li>`).join("");
+  h += "</ul><h2 style=\"margin-top:14px\">Competing software</h2>";
+  h += snap.competitors.length
+    ? '<ul class="list">' + snap.competitors.map(c => `<li><span class="dot warn"></span><div><b>${esc(c.name)}</b><div class="muted">${esc(c.kind)} · ${esc(c.detail)}</div></div></li>`).join("") +
+      '</ul><p class="hint">Magic Utilities, Trackpad++ and Boot Camp drivers can fight the Magic driver. Uninstall them before installing; nothing is removed automatically.</p>'
+    : '<p class="muted">None found.</p>';
+  $("env").innerHTML = h;
+}
+
+function renderLast() {
+  const a = snap.action;
+  if (!a) { $("last").innerHTML = '<h2>Last action</h2><p class="muted">Nothing yet.</p>'; return; }
+  const open = $("last").querySelector("details")?.open ? " open" : "";
+  $("last").innerHTML = `<h2>Last action</h2><details${open}><summary>${esc(a.kind)} · ${esc(a.state)}${a.finished ? " · " + ago(a.finished) : ""}${a.dry_run ? " · dry run" : ""}</summary>
+    <pre class="log" id="logtext">${esc((a.log || []).join("\n"))}</pre><div class="btns"><button class="small" data-copylog>Copy log</button></div></details>`;
+}
+
+function renderHead() {
+  const st = statusInfo(snap), inst = snap.installed;
+  $("headnote").textContent = inst ? `Magic Trackpad driver ${inst.version || ""} · ${st.text.toLowerCase()}` : "Magic Trackpad driver is not installed";
+  $("checkinfo").textContent = st.small;
+}
+
+function render() {
+  if (!snap) return;
+  renderHead(); renderPkg(); renderDevs(); renderEnv();
+  if (!$("last").querySelector("pre") || !watching) renderLast(); else $("logtext").textContent = (snap.action.log || []).join("\n");
+}
+
+async function load() {
+  const r = await api("/api/drivers");
+  if (r.ok) { snap = r.data; render(); }
+  else $("headnote").textContent = "Could not read driver status";
+}
+
+// Progress: the shared event stream (if the page chrome provides one) plus polling as the fallback.
+function watch(id) {
+  watching = id; applied = false;
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    const r = await api(`/api/drivers/action/${id}`);
+    if (r.ok) onAction(r.data);
+  }, 1500);
+}
+function onAction(a) {
+  if (!snap || (watching && a.id !== watching)) return;
+  snap.action = Object.assign({}, snap.action, a);
+  snap.busy = !["done", "failed"].includes(a.state);
+  if (!snap.busy) { clearInterval(pollTimer); setTimeout(load, 500); }
+  render();
+}
+try {
+  if (window.MC && MC.stream) {
+    MC.stream.setKinds && MC.stream.setKinds(["action", "driver"]);
+    MC.stream.onEvent && MC.stream.onEvent(e => { if (e && e.type === "driver") onAction({ id: e.actionId, state: e.state, detail: e.detail, log: e.log, kind: snap && snap.action && snap.action.kind }); });
+  }
+} catch {}
+
+async function start(path, body) {
+  const r = await api(path, "POST", body);
+  if (!r.ok) { MC.toast(r.data.error || `Request failed (${r.status})`, 4000); load(); return; }
+  snap.busy = true; snap.action = { id: r.data.actionId, kind: path.split("/").pop(), state: "queued", detail: "starting…", log: [] };
+  watch(r.data.actionId); render();
+}
+
+document.addEventListener("click", async e => {
+  const t = e.target;
+  if (t.closest("#checkNow") || t.closest("[data-check]")) {
+    const btn = t.closest("button"); btn.disabled = true;
+    const r = await api("/api/drivers/check", "POST");
+    if (r.ok) { snap = r.data; render(); MC.toast(snap.check_error ? "Check failed: " + snap.check_error : "Release info updated"); }
+    btn.disabled = false; return;
+  }
+  if (t.dataset.ask) { confirmState = { kind: t.dataset.ask }; renderPkg(); return; }
+  if (t.dataset.restart) { confirmState = { kind: "restart", id: t.dataset.restart, label: t.dataset.label }; renderPkg(); $("pkg").scrollIntoView({ block: "nearest" }); return; }
+  if ("applySettings" in t.dataset) { confirmState = { kind: "apply" }; renderPkg(); return; }
+  if ("cancel" in t.dataset) { confirmState = null; renderPkg(); return; }
+  if ("copylog" in t.dataset) {
+    try { await navigator.clipboard.writeText($("logtext").textContent); MC.toast("Log copied"); } catch { MC.toast("Could not copy"); }
+    return;
+  }
+  if ("go" in t.dataset && confirmState) {
+    const c = confirmState; confirmState = null;
+    const rel = snap.release;
+    if (c.kind === "install" || c.kind === "reinstall") return start(`/api/drivers/${c.kind}`, { tag: rel.tag, asset: rel.asset, sha256: rel.sha256 });
+    if (c.kind === "uninstall") return start("/api/drivers/uninstall", { oem: snap.installed.oem, confirm: "uninstall" });
+    if (c.kind === "restart") return start("/api/drivers/restart", { instanceId: c.id });
+    if (c.kind === "apply") {
+      applied = true; renderPkg(); MC.toast("Waiting for administrator approval…", 4000);
+      const r = await api("/api/driver/apply", "POST", { changes: {} });
+      MC.toast(r.ok ? "Driver settings written. Power-cycle the trackpad (Bluetooth) or re-plug it (USB)." : "Driver settings not written (approval declined?)", 5000);
+      applied = r.ok; renderPkg();
+    }
+  }
+});
+
+load();
+setInterval(() => { if (!snap || !snap.busy) load(); }, 10000);
+</script>
+</body>
+</html>
