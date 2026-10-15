@@ -40,8 +40,15 @@ body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 syste
 .pagehead h1 { font-size: 20px; margin: 0; font-weight: 600; }
 .pagehead .grow { margin-left: auto; }
 .pagehead .rel, .rel { position: relative; }
-.keybtn { padding: 4px 12px; border-radius: 999px; }
-.keybtn[aria-expanded=true] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.morebtn { padding: 3px 11px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+.morebtn[aria-expanded=true] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.morebtn::after { content: " \25BE"; }
+.morebtn[aria-expanded=true]::after { content: " \25B4"; }
+/* Essential legend shown inline in the title row; wraps below the title on narrow widths. */
+.pagehead .inline { margin: 0; gap: 4px 14px; min-width: 0; align-items: center; }
+.pagehead .inline span { display: inline-flex; align-items: center; white-space: nowrap; }
+.pagehead .inline .dot { margin-right: 6px; }
+@media (max-width: 700px) { .pagehead .inline { order: 3; flex: 1 0 100%; } .pagehead .rel.grow { order: 2; } }
 .popover { position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; width: min(420px, calc(100vw - 32px));
            background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px;
            box-shadow: 0 8px 30px rgba(0,0,0,.25); display: none; font-size: 13px; }

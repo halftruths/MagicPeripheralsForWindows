@@ -1,5 +1,5 @@
 // Shared chrome for all companion pages: top bar (title + nav), bottom status bar (server + devices),
-// transient toast (also used for gesture actions) and Key-popover wiring.
+// transient toast (also used for gesture actions) and dropdown wiring.
 (() => {
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const path = location.pathname;
@@ -58,7 +58,7 @@
     };
   } catch {}
 
-  // Key popovers: <button class="keybtn" data-pop="id"> toggles <div class="popover" id="id">.
+  // Dropdowns: <button class="morebtn" data-pop="id"> toggles <div class="popover" id="id">.
   function closeAll(except) {
     document.querySelectorAll(".popover.open").forEach(p => {
       if (p === except) return;

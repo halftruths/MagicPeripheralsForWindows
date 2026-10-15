@@ -6,10 +6,10 @@
 <title>Magic Companion Settings</title>
 <link rel="stylesheet" href="/common.css">
 <style>
-  /* In rows the backend is a colored dot (legend in the Key popover) so labels stay on one line. */
+  /* In rows the backend is a colored dot (legend inline in the title row) so labels stay on one line. */
   .dot.windows { background: var(--b-windows); } .dot.companion { background: var(--b-companion); } .dot.driver { background: var(--b-driver); }
-  .keybtn .flag { display: none; width: 7px; height: 7px; border-radius: 50%; background: var(--b-driver); margin-left: 6px; vertical-align: 1px; }
-  .keybtn .flag.on { display: inline-block; }
+  .morebtn .flag { display: none; width: 7px; height: 7px; border-radius: 50%; background: var(--b-driver); margin-left: 6px; vertical-align: 1px; }
+  .morebtn .flag.on { display: inline-block; }
   main { padding: 8px 20px 24px; display: grid; gap: 4px; }
   h2.sec { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 2px 8px; font-weight: 600; }
   .cards { display: grid; gap: 16px; align-items: start; }
@@ -74,15 +74,14 @@
 <body>
 <div class="pagehead">
   <h1>Settings</h1>
+  <div class="legend inline" aria-label="Setting types">
+    <span><span class="dot windows"></span>Windows · instant</span>
+    <span><span class="dot companion"></span>Companion · instant</span>
+    <span><span class="dot driver"></span>Driver · UAC + power-cycle</span>
+  </div>
   <div class="rel grow">
-    <button class="keybtn" data-pop="keypop" aria-expanded="false">Key<span class="flag" id="keyflag"></span></button>
-    <div class="popover" id="keypop">
-      <h3>Setting types</h3>
-      <div class="legend">
-        <span><span class="dot windows"></span> Windows, instant</span>
-        <span><span class="dot companion"></span> Companion, instant</span>
-        <span><span class="dot driver"></span> Driver, UAC + power-cycle</span>
-      </div>
+    <button class="morebtn" data-pop="morepop" aria-expanded="false" aria-haspopup="true">More<span class="flag" id="keyflag"></span></button>
+    <div class="popover" id="morepop">
       <h3>Status</h3>
       <div id="notes">Loading…</div>
       <h3>Display</h3>
@@ -206,7 +205,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "Escape" && raised.length && !document.querySelector(".popover.open")) collapse(raised[raised.length - 1]);
 }, true);
 document.addEventListener("click", e => {
-  if (raised.length && !e.target.closest(".card, .bar, .popover, .keybtn, #toast")) { raised = []; layout(); }
+  if (raised.length && !e.target.closest(".card, .bar, .popover, .morebtn, #toast")) { raised = []; layout(); }
 });
 let layoutQueued = false;
 window.addEventListener("resize", () => { if (layoutQueued) return; layoutQueued = true; requestAnimationFrame(() => { layoutQueued = false; layout(); }); });
