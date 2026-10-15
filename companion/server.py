@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from battery import read_batteries  # noqa: E402
+from battery import DeviceMonitor  # noqa: E402
 from input_capture import X_MAX, Y_MAX, InputCapture  # noqa: E402
 
 WEB = ROOT / "web"
@@ -88,6 +88,7 @@ class Hub:
 
 
 hub = Hub()
+devices = DeviceMonitor()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -109,8 +110,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/events":
             return self._events()
-        if self.path == "/api/battery":
-            return self._json(read_batteries())
+        if self.path == "/api/devices":
+            return self._json(devices.status())
         if self.path == "/api/recordings":
             files = sorted(RECORDINGS.glob("*.jsonl"), reverse=True) if RECORDINGS.exists() else []
             return self._json([{"name": p.name, "bytes": p.stat().st_size} for p in files])

@@ -22,6 +22,9 @@
   .chips { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
   .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 12px; color: var(--muted); }
   .chip b { color: var(--ink); font-weight: 600; }
+  .chip .dot { margin-right: 5px; vertical-align: 1px; }
+  .chip.off { border-style: dashed; }
+  .chip.off b { color: var(--bad); }
   main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; padding: 16px 20px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
@@ -233,10 +236,22 @@ function connect() {
   es.onmessage = m => { const e = JSON.parse(m.data); e.type === "frame" ? onFrame(e) : e.type === "wheel" && onWheel(e); };
 }
 
-async function refreshBattery() {
+function ago(epochSeconds) {
+  const s = Math.max(0, Date.now() / 1000 - epochSeconds);
+  return s < 60 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`;
+}
+
+async function refreshDevices() {
   try {
-    const list = await (await fetch("/api/battery")).json();
-    $("battery").innerHTML = list.map(b => `<span class="chip">${b.device} <b>${b.percent}%</b></span>`).join("") || '<span class="chip">no battery data</span>';
+    const list = await (await fetch("/api/devices")).json();
+    $("battery").innerHTML = list.map(d => {
+      if (d.connected) {
+        const level = d.percent == null ? "reading…" : `<b>${d.percent}%</b>`;
+        return `<span class="chip" title="Connected"><span class="dot on"></span>${d.device} ${level}</span>`;
+      }
+      const last = d.percent == null ? "" : ` · last ${d.percent}% ${ago(d.read_at)}`;
+      return `<span class="chip off" title="Not connected"><span class="dot"></span>${d.device} <b>disconnected</b>${last}</span>`;
+    }).join("") || '<span class="chip">no Apple devices paired</span>';
   } catch { /* server restarting */ }
 }
 
@@ -259,7 +274,7 @@ $("recbtn").onclick = async () => {
 };
 $("reset").onclick = () => { counters = { frozen: 0, flicker: 0, v: 0, h: 0 }; };
 
-connect(); refreshBattery(); refreshRecordings(); setInterval(refreshBattery, 60000); loop();
+connect(); refreshDevices(); refreshRecordings(); setInterval(refreshDevices, 3000); loop();
 </script>
 </body>
 </html>
