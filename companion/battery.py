@@ -10,9 +10,15 @@ Bluetooth reading, kept across restarts in battery.local.json, and is reported a
 node also yields the serial (instance id suffix) and firmware revision (REV_xxxx of the hardware id).
 
 Battery: the vendor collection (page 0xFF00 usage 0x14), report 0x90. Layout measured on Magic
-Keyboard (0320) and Magic Trackpad (0324): [0x90, status flags, percent]. The status bits are
-not decoded yet, so they're passed through raw. A HID read can return a stale value while the
-device is off, so battery is only trusted while the device is connected.
+Keyboard (0320) and Magic Trackpad (0324): [0x90, status flags, percent]. Status bits (decoded with the
+HID parser against the report descriptor, then confirmed by unplugging/replugging a Magic Keyboard's
+charger, 2026-10-15):
+  bit0 (Battery System usage 0x46)  external power connected
+  bit1 (usage 0x44, "Charging")     charging (stays set at 100% while on power)
+  bit2 (usage 0x61)                 running on battery
+  e.g. 0x04 unplugged, 0x05 just plugged in, 0x03 plugged in and charging.
+A HID read can return a stale value while the device is off, so battery is only trusted while the device is
+connected.
 """
 
 import ctypes
@@ -27,7 +33,8 @@ from tools.hidprobe import GUID, HIDD_ATTRIBUTES, hid, hid_interface_paths, kern
 
 DEVICE_NAMES = {0x0320: "Magic Keyboard", 0x0324: "Magic Trackpad"}
 DEVICE_IDS = {0x0320: "keyboard", 0x0324: "trackpad"}
-BATTERY_MAX_AGE = 60  # seconds between battery reads while connected
+BATTERY_MAX_AGE = 10  # seconds between battery reads while connected (short so plugging in a charger shows quickly)
+FLAG_EXTERNAL_POWER, FLAG_CHARGING = 0x01, 0x02
 INFO_MAX_AGE = 60     # seconds between reads of the slow properties (name, address, serial, firmware)
 SAVE_INTERVAL = 60    # seconds between cache writes caused only by lastSeen advancing while connected
 BATTERY_CACHE = Path(__file__).resolve().parent / "battery.local.json"
@@ -273,8 +280,9 @@ class DeviceMonitor:
             if stale:
                 for pid, (percent, flags) in read_battery_reports().items():
                     if bluetooth.get(pid):
+                        if self.battery.get(pid, (None, None, None))[:2] != (percent, flags):
+                            dirty = True  # persist only real changes; reads happen every BATTERY_MAX_AGE seconds
                         self.battery[pid] = (percent, flags, now)
-                dirty = True
             online = {pid: bool(bluetooth.get(pid)) or pid in usb for pid in set(bluetooth) | set(usb)}
             for pid, on in online.items():
                 if on:
@@ -292,8 +300,10 @@ class DeviceMonitor:
                 transport = "usb" if pid in usb else "bluetooth" if bluetooth.get(pid) else None
                 percent, flags, read_at = self.battery.get(pid, (None, None, None))
                 info = self.info.get(pid, {})
+                # Wired devices charge from the cable; Bluetooth devices report power/charging in the status byte.
+                charging = transport == "usb" or (transport == "bluetooth" and bool((flags or 0) & (FLAG_EXTERNAL_POWER | FLAG_CHARGING)))
                 out.append({"device": name, "connected": transport is not None, "transport": transport,
-                            "charging": transport == "usb", "percent": percent, "flags": flags, "read_at": read_at,
+                            "charging": charging, "percent": percent, "flags": flags, "read_at": read_at,
                             "percentLive": transport == "bluetooth",
                             "id": DEVICE_IDS[pid], "pid": pid, "name": info.get("name") or name,
                             "address": info.get("address"), "serial": info.get("serial"),
