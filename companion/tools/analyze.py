@@ -81,6 +81,33 @@ def analyze(path):
     for before, after, gap in flickers[:8]:
         print(f"  id {after['id']}: gap {gap * 1000:.0f} ms, before state {before['state']} p{before['p']} -> after state {after['state']} p{after['p']}")
 
+    # Press-and-drag: while the button is held, do contacts keep moving and keep their tip?
+    presses, cur = [], None
+    for f in frames:
+        if f["button"]:
+            cur = cur or []
+            cur.append(f)
+        elif cur:
+            presses.append(cur)
+            cur = None
+    if cur:
+        presses.append(cur)
+    print(f"\nButton presses: {len(presses)}")
+    for i, p in enumerate(presses, 1):
+        ids = {c["id"] for f in p for c in f["contacts"]}
+        print(f"  press {i}: {len(p)} frames, {p[-1]['t'] - p[0]['t']:.2f}s, contact ids {sorted(ids)}")
+        for cid in sorted(ids):
+            track = [(c["x"], c["y"], c["tip"], c["state"], c["p"]) for f in p for c in f["contacts"] if c["id"] == cid]
+            xs = {(x, y) for x, y, *_ in track}
+            tips = Counter(t for _, _, t, _, _ in track)
+            states = Counter(s for *_, s, _ in track)
+            first, last = track[0], track[-1]
+            print(f"    id {cid}: moved {abs(last[0] - first[0]) + abs(last[1] - first[1])} units, {len(xs)} distinct positions / {len(track)} frames, "
+                  f"tip {dict(tips)}, states {dict(states)}, pressure {min(t[4] for t in track)}-{max(t[4] for t in track)}")
+        empty = sum(1 for f in p if not any(c["tip"] for c in f["contacts"]))
+        if empty:
+            print(f"    !! {empty} frames with the button down but no touching contact")
+
     # Two-finger swipes: finger direction vs emitted wheel direction
     segments, cur = [], None
     for f in frames:
