@@ -6,12 +6,32 @@
 <title>Magic Companion</title>
 <link rel="stylesheet" href="/common.css">
 <style>
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; padding: 16px 20px; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  canvas { width: 100%; display: block; }
-  #pad { aspect-ratio: 1600 / 1149; border-radius: 10px; background: var(--pad); }
-  #timeline { height: 180px; }
-  .stack { display: grid; gap: 16px; align-content: start; }
+  html, body { overflow: hidden; overscroll-behavior: none; }
+  body { height: 100dvh; min-height: 0; display: flex; flex-direction: column; }
+  .pagehead { flex: none; padding-top: 10px; padding-bottom: 0; }
+  main { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; grid-template-rows: minmax(0, 1fr);
+         gap: 12px; padding: 10px 20px 12px; overflow: hidden; }
+  .left { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .left .card { padding: 10px 12px; }
+  .left .card h2 { margin-bottom: 6px; }
+  .padcard { flex: none; display: flex; flex-direction: column; align-items: center; }
+  .padcard h2 { align-self: flex-start; }
+  .tlcard { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; } /* fills whatever height the capped trackpad leaves */
+  .tlcard .preview { flex: 1 1 0; min-height: 0; }
+  .preview canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #padwrap { width: 320px; height: 230px; max-width: 100%; }
+  canvas { display: block; }
+  #pad { border-radius: 10px; background: var(--pad); }
+  .side { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: 12px; overflow: auto; overscroll-behavior: contain; }
+  .side .card { flex: none; min-height: 0; }
+  .side .reccard { flex: 1 1 0; min-height: 150px; display: flex; flex-direction: column; }
+  @media (max-width: 900px) {
+    main { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) clamp(120px, 22dvh, 240px); padding: 8px 12px 10px; gap: 10px; }
+    .side { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; gap: 10px; }
+    .side .card { overflow: auto; overscroll-behavior: contain; padding: 10px 12px; }
+    .side .reccard { display: block; min-height: 0; }
+    .side .card h2 { margin-bottom: 6px; }
+  }
   .stats { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; font-variant-numeric: tabular-nums; }
   .stats span:nth-child(odd) { color: var(--muted); }
   .stats .bad { color: var(--bad); font-weight: 600; }
@@ -19,7 +39,7 @@
   button.primary { background: var(--touch); border-color: var(--touch); color: #fff; }
   button.rec { background: var(--bad); border-color: var(--bad); color: #fff; }
   .row { display: flex; gap: 8px; margin-top: 8px; }
-  ul { list-style: none; padding: 0; margin: 10px 0 0; font-size: 12px; color: var(--muted); max-height: 140px; overflow: auto; }
+  ul { list-style: none; padding: 0; margin: 10px 0 0; font-size: 12px; color: var(--muted); overflow: auto; overscroll-behavior: contain; flex: 1 1 auto; min-height: 40px; }
   li { padding: 3px 0; border-top: 1px solid var(--line); }
   .toggle { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
   .toggle input { width: 16px; height: 16px; accent-color: var(--touch); }
@@ -63,18 +83,18 @@
   </div>
 </div>
 <main>
-  <div class="stack">
-    <div class="card">
+  <div class="left">
+    <div class="card padcard" id="padcard">
       <h2>Trackpad (live)</h2>
-      <div class="preview"><canvas id="pad"></canvas>
+      <div class="preview" id="padwrap"><canvas id="pad"></canvas>
         <div class="off">Live previews are off to save CPU. Gestures, settings and recording keep working.<br>Turn on "Live previews" above to see touches.</div></div>
     </div>
-    <div class="card">
+    <div class="card tlcard" id="tlcard">
       <h2>Scroll timeline (last 6 s)</h2>
       <div class="preview"><canvas id="timeline"></canvas><div class="off">Previews off</div></div>
     </div>
   </div>
-  <div class="stack">
+  <div class="side">
     <div class="card">
       <h2>Stats</h2>
       <div class="stats">
@@ -88,7 +108,7 @@
       </div>
       <div class="row"><button id="reset">Reset counters</button></div>
     </div>
-    <div class="card">
+    <div class="card reccard">
       <h2>Record</h2>
       <input type="text" id="label" placeholder="What are you testing? e.g. diagonal scroll in Excel">
       <div class="row"><button class="primary" id="recbtn">Start recording</button></div>
@@ -265,6 +285,27 @@ $("recbtn").onclick = async () => {
 $("reset").onclick = () => { counters = { frozen: 0, flicker: 0, v: 0, h: 0 }; };
 
 const previewsOn = (() => { try { return localStorage.getItem("previews") === "1"; } catch { return false; } })();
+// Fit-to-viewport: trackpad canvas keeps 1600:1149 and both sides stay <= 0.75 * min(content w, content h).
+function layout() {
+  const main = document.querySelector("main"), left = document.querySelector(".left");
+  const cs = getComputedStyle(main);
+  const cw = main.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const ch = main.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const cap = 0.75 * Math.min(cw, ch);
+  const wrap = $("padwrap"), padCard = $("padcard"), tlCard = $("tlcard");
+  const pcs = getComputedStyle(padCard);
+  const padChrome = padCard.offsetHeight - wrap.offsetHeight;
+  const padInnerW = left.clientWidth - parseFloat(pcs.paddingLeft) - parseFloat(pcs.paddingRight) - 2;
+  const tlMin = 56 + (tlCard.offsetHeight - tlCard.querySelector(".preview").offsetHeight);
+  const gap = parseFloat(getComputedStyle(left).rowGap) || 0;
+  const byH = (left.clientHeight - gap - tlMin - padChrome) * 1600 / 1149;
+  let w = Math.floor(Math.max(80, Math.min(cap, padInnerW, byH)));
+  wrap.style.width = w + "px";
+  wrap.style.height = Math.round(w * 1149 / 1600) + "px";
+}
+new ResizeObserver(layout).observe(document.querySelector("main"));
+window.addEventListener("resize", layout);
+layout();
 $("previews").checked = previewsOn;
 $("previews").onchange = e => setPreviews(e.target.checked);
 setPreviews(previewsOn);
