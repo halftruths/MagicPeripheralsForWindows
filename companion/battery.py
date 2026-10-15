@@ -29,6 +29,7 @@ import time
 from ctypes import wintypes as w
 from pathlib import Path
 
+from paths import DATA_DIR
 from tools.hidprobe import GUID, HIDD_ATTRIBUTES, hid, hid_interface_paths, kernel32, open_device, setupapi
 
 DEVICE_NAMES = {0x0320: "Magic Keyboard", 0x0324: "Magic Trackpad"}
@@ -37,7 +38,7 @@ BATTERY_MAX_AGE = 10  # seconds between battery reads while connected (short so 
 FLAG_EXTERNAL_POWER, FLAG_CHARGING = 0x01, 0x02
 INFO_MAX_AGE = 60     # seconds between reads of the slow properties (name, address, serial, firmware)
 SAVE_INTERVAL = 60    # seconds between cache writes caused only by lastSeen advancing while connected
-BATTERY_CACHE = Path(__file__).resolve().parent / "battery.local.json"
+BATTERY_CACHE = DATA_DIR / "battery.local.json"
 DIGCF_PRESENT = 0x02
 
 DIGCF_ALLCLASSES = 0x04

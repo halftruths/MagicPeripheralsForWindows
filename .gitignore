@@ -14,3 +14,7 @@ companion/*.local.json
 companion/settings.local.json.bak
 companion/driver.local.json
 companion/driver-cache/
+companion/packaging/build/
+companion/packaging/dist/
+companion/packaging/Output/
+companion/packaging/.venv/

@@ -13,8 +13,9 @@ import winreg
 from pathlib import Path
 
 import winapi
+from paths import DATA_DIR
 
-STORE = Path(__file__).resolve().parent / "settings.local.json"
+STORE = DATA_DIR / "settings.local.json"
 # Bluetooth goes through the kernel filter, USB through the user-mode driver; each reads its own key.
 DRIVER_KEYS = (
     r"SYSTEM\CurrentControlSet\Services\AmtPtpHidFilter\Parameters",

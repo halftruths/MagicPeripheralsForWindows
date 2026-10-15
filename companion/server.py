@@ -8,12 +8,14 @@ Then open http://127.0.0.1:8765. Binds to localhost only.
 import argparse
 import atexit
 import json
+import os
 import queue
 import secrets
 import subprocess
 import sys
 import tempfile
 import traceback
+import webbrowser
 import threading
 import time
 from datetime import datetime
@@ -24,6 +26,8 @@ from urllib.parse import parse_qs, urlparse
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
+import tray  # noqa: E402
+from paths import APP_DIR, DATA_DIR, FROZEN  # noqa: E402
 from alerts import BatteryAlerts  # noqa: E402
 import drivers  # noqa: E402
 from battery import DeviceMonitor  # noqa: E402
@@ -31,8 +35,8 @@ from gestures import GestureEngine  # noqa: E402
 from input_capture import X_MAX, Y_MAX, InputCapture  # noqa: E402
 from settings import DRIVER_KEYS, DEVICES, Settings, driver_registry_values, schema_for  # noqa: E402
 
-WEB = ROOT / "web"
-RECORDINGS = ROOT / "recordings"
+WEB = APP_DIR / "web"
+RECORDINGS = DATA_DIR / "recordings"
 CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml"}
 PAGES = {"/": "home.html", "/live": "live.html", "/settings": "settings.html", "/drivers": "drivers.html"}
 REDIRECTS = {"/index.html": "/live", "/settings.html": "/settings"}
@@ -150,7 +154,7 @@ def apply_driver_settings(values):
     launcher = (f"try {{ $p = Start-Process powershell -Verb RunAs -Wait -PassThru "
                 f"-ArgumentList '-NoProfile -ExecutionPolicy Bypass -File \"{script}\"'; exit $p.ExitCode }} "
                 f"catch {{ exit 1223 }}")
-    proc = subprocess.run(["powershell", "-NoProfile", "-Command", launcher], capture_output=True)
+    proc = subprocess.run(["powershell", "-NoProfile", "-Command", launcher], capture_output=True, creationflags=0x08000000)
     return proc.returncode == 0
 
 
@@ -292,19 +296,56 @@ class Handler(BaseHTTPRequestHandler):
             hub.remove_client(q)
 
 
+def _redirect_output():
+    """The windowed build has no console; keep a small log instead."""
+    log = DATA_DIR / "companion.log"
+    try:
+        if log.exists() and log.stat().st_size > 1_000_000:
+            log.replace(log.with_suffix(".log.old"))
+        sys.stdout = sys.stderr = open(log, "a", buffering=1, encoding="utf-8")
+    except OSError:
+        sys.stdout = sys.stderr = open(os.devnull, "w")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--background", action="store_true", help="start without opening a browser")
+    parser.add_argument("--tray", action="store_true", help="show a tray icon (always on in the packaged app)")
+    parser.add_argument("--quit", action="store_true", help="ask the running instance to quit, then exit")
     args = parser.parse_args()
+    use_tray = FROZEN or args.tray
+    if FROZEN:
+        _redirect_output()
+    if args.quit:
+        sys.exit(0 if tray.quit_running() else 1)
+    if use_tray and not tray.acquire_instance():
+        if not args.background:
+            webbrowser.open(f"http://127.0.0.1:{tray.running_port() or args.port}/")
+        return
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    except OSError as e:
+        print(f"cannot listen on port {args.port}: {e}")
+        if use_tray and not args.background:
+            tray.message_box(f"Magic Companion could not start: port {args.port} is in use.\n\n"
+                             "Is another copy running? Use --port to pick a different one.")
+        sys.exit(1)
+    server.daemon_threads = True
+    icon = tray.Tray(args.port, server.shutdown) if use_tray else None
+    if icon:
+        atexit.register(icon.close)  # registered first so it runs last, after the restores below
     settings.apply_side_effects()
     atexit.register(settings.restore_windows_scrolling)
     atexit.register(hub.engine.shutdown)
     BatteryAlerts(devices.status, settings, hub.publish).start()
     hub.capture.start()
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    server.daemon_threads = True
     drivers.warm_probe()  # background first driver scan (~7 s) so /drivers is usually ready when opened
     print(f"Magic companion running at http://127.0.0.1:{args.port}  (Ctrl+C to stop)")
+    if icon:
+        icon.start()
+        if not args.background:
+            icon.open_browser()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

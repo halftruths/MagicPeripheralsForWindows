@@ -8,11 +8,21 @@ Makes Apple's Magic Trackpad and Magic Keyboard feel more at home on Windows. A 
 - Magic Trackpad, USB-C model (2024), over Bluetooth and USB-C
 - Magic Keyboard, USB-C model (2024), over Bluetooth (battery and connection status only)
 
-## Setup
+## Install
+
+Download `MagicCompanion-Setup-<version>.exe` from the [latest release](https://github.com/halftruths/MagicPeripheralsForWindows/releases/latest) and run it. It installs for your user only (no admin prompt) and adds a Start menu shortcut. The installer is unsigned, so Windows SmartScreen will warn: choose **More info**, then **Run anyway**. A portable zip is also attached to each release.
+
+The companion runs in the background with a tray icon: click it to open the app, right-click for **Start with Windows** (also offered by the installer) and **Quit**. You still need the trackpad driver; see Setup below.
+
+## Uninstall
+
+**Settings > Apps > Magic Companion > Uninstall.** It stops the app (restoring Windows' own touchpad gestures), removes the program and shortcuts, and asks whether to delete your settings (`%LOCALAPPDATA%\MagicCompanion`). The trackpad drivers are not touched: remove them from the companion's **Drivers** page first if you want them gone.
+
+## Setup (driver, or running from source)
 
 1. Install the signed driver. Either use the companion's **Drivers** page (step 4; it downloads the latest Microsoft-signed release, checks its SHA-256 and signature, and installs it after one admin prompt), or do it by hand: download the latest `MT2FW11-…-MSSigned.zip` from [vitoplantamura's releases](https://github.com/vitoplantamura/MagicTrackpad2ForWindows/releases), unzip it, then right-click `AMD64\AmtPtpDevice.inf` and choose **Install**. Uninstall Magic Utilities or Trackpad++ first if you have them.
 2. In an admin PowerShell, run `companion\tools\apply-driver-settings.ps1`. This fixes stuck fingers and press-and-drag. Then power-cycle the trackpad (Bluetooth) or unplug and re-plug it (USB-C).
-3. Install [Python 3.10+](https://www.python.org/downloads/). No packages are needed.
+3. Skip this and the next step if you installed the app above. Otherwise install [Python 3.10+](https://www.python.org/downloads/). No packages are needed.
 4. Run `python companion/server.py` and open http://127.0.0.1:8765 (the home page shows your devices; the live touch view is at `/live`).
 
 Gestures only work while the companion is running. It turns off Windows' own 3- and 4-finger gestures so they don't fire twice; turn that setting off in the companion to hand them back to Windows.

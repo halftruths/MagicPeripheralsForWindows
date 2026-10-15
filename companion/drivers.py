@@ -31,10 +31,11 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
-ROOT = Path(__file__).resolve().parent
-STATE_FILE = ROOT / "driver.local.json"
-ZIP_CACHE = ROOT / "driver-cache"
-INF_SOURCE = ROOT.parent / "build" / "AmtPtpDevice_AMD64.inf"
+from paths import BUILD_DIR, DATA_DIR
+
+STATE_FILE = DATA_DIR / "driver.local.json"
+ZIP_CACHE = DATA_DIR / "driver-cache"
+INF_SOURCE = BUILD_DIR / "AmtPtpDevice_AMD64.inf"
 
 DRY_RUN = os.environ.get("MC_DRIVER_DRY_RUN") == "1"
 AUTO_CHECK = True  # GET /api/drivers may start a background release check when the cache is older than RELEASE_TTL
