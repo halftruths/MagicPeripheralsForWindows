@@ -358,41 +358,93 @@ def _classify(nodes, packages):
     return out
 
 
-_probe = {"t": 0.0, "data": None, "error": None}
+_probe = {"t": 0.0, "data": None, "error": None, "phase": None, "label": None}
 _probe_lock = threading.Lock()
 
 
+def _phase(phase, label):
+    """Record and publish the probe step that is starting (shown as the status phrase on the Drivers page)."""
+    _probe["phase"], _probe["label"] = phase, label
+    try:
+        publish({"type": "driver", "probe": phase, "label": label})
+    except Exception:
+        pass
+
+
 def _do_probe():
-    nodes = _read_nodes()
+    _phase("store", "Reading the driver store…")
     packages = _driver_packages()
     ours = [p for p in packages if _ours(p)]
     installed = []
     for p in ours:
         d, v = _store_driver_ver(p["package"])
         installed.append({"oem": p["oem"], "inf": p["inf"], "provider": p["provider"], "signer": p["signer"], "package": p["package"], "date": d, "version": v})
-    data = {"t": time.time(), "installed": installed, "groups": _classify(nodes, packages), "competitors": _competitors(packages),
-            "environment": _environment(),
+    _phase("devices", "Checking how each device is bound…")  # the slow PowerShell step
+    nodes = _read_nodes()
+    groups = _classify(nodes, packages)
+    _phase("software", "Looking for conflicting software…")
+    competitors = _competitors(packages)
+    _phase("environment", "Checking Secure Boot and test signing…")
+    environment = _environment()
+    if _read_state().get("release"):
+        _phase("release", "Comparing with the latest release…")
+    return {"t": time.time(), "installed": installed, "groups": groups, "competitors": competitors, "environment": environment,
             "node_ids": {n["id"] for n in nodes if n.get("present")}}
-    return data
 
 
-def refresh_probe():
-    with _probe_lock:
+def refresh_probe(shared=False):
+    """Run a probe. With shared=True, a probe already in flight is awaited instead of starting a second one."""
+    if shared:
+        if not _probe_lock.acquire(blocking=False):
+            with _probe_lock:  # wait for the running probe, then use its result
+                return
+    else:
+        _probe_lock.acquire()
+    try:
         try:
             _probe["data"] = _do_probe()
             _probe["error"] = None
         except Exception as e:  # keep serving the previous snapshot
             _probe["error"] = str(e)
         _probe["t"] = time.time()
+    finally:
+        _probe["phase"] = _probe["label"] = None
+        _probe_lock.release()
+        try:
+            publish({"type": "driver", "probe": "done"})
+        except Exception:
+            pass
 
 
-def get_probe():
-    """Cached probe; refreshes in the background when stale, blocks only for the very first probe."""
+def warm_probe():
+    """Start the first probe in the background (called at server startup)."""
+    if _probe["data"] is None and not _probe_lock.locked() and time.time() - _probe["t"] > PROBE_TTL:  # t == 0 before the first probe
+        threading.Thread(target=refresh_probe, kwargs={"shared": True}, daemon=True, name="driver-probe-warm").start()
+
+
+def invalidate():
+    """Mark the cached snapshot stale (e.g. a device was plugged in): the next GET refreshes it in the background."""
+    _probe["t"] = 1.0 if _probe["data"] is not None else _probe["t"]
+
+
+def start_refresh():
+    """Start a probe in the background, or join the one already running. Returns immediately."""
+    if not _probe_lock.locked():
+        threading.Thread(target=refresh_probe, kwargs={"shared": True}, daemon=True, name="driver-probe-refresh").start()
+    return True
+
+
+def get_probe(block=True):
+    """Cached probe; refreshes in the background when stale. Blocks only for the very first probe (shares one in flight),
+    or returns (None, error) immediately with block=False."""
     age = time.time() - _probe["t"]
     if _probe["data"] is None:
-        refresh_probe()
+        if block:
+            refresh_probe(shared=True)
+        else:
+            warm_probe()
     elif age > PROBE_TTL and not _probe_lock.locked():
-        threading.Thread(target=refresh_probe, daemon=True).start()
+        threading.Thread(target=refresh_probe, kwargs={"shared": True}, daemon=True).start()
     return _probe["data"], _probe["error"]
 
 
@@ -942,7 +994,11 @@ def start_restart(instance_id):
 # --------------------------------------------------------------------------------------------- API
 
 def snapshot():
-    data, perr = get_probe()
+    data, perr = get_probe(block=False)
+    if data is None and (_probe_lock.locked() or _probe["t"] == 0):
+        # First probe still running: answer at once so the page can show real progress instead of hanging.
+        return {"loading": True, "phase": _probe["phase"] or "starting", "label": _probe["label"] or "Starting the driver check…",
+                "probe_error": None, "now": time.time()}
     if AUTO_CHECK:
         _maybe_auto_check()
     st = _read_state()
@@ -979,6 +1035,9 @@ def api_get(path):
 def api_post(path, body):
     body = body if isinstance(body, dict) else {}
     try:
+        if path == "/api/drivers/refresh":
+            start_refresh()
+            return 202, {"refreshing": True}
         if path == "/api/drivers/check":
             check_release()
             return 200, snapshot()

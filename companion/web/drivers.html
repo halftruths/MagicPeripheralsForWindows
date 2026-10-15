@@ -55,6 +55,39 @@
   pre.log { margin: 8px 0 0; max-height: 220px; overflow: auto; background: var(--field); border: 1px solid var(--rule-soft); border-radius: 8px;
             padding: 8px 10px; font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
   .popover button.wide { width: 100%; text-align: left; margin-top: 4px; }
+
+  /* Loading state: soft placeholder bars with a slow light sweep, and a status phrase with a shimmering gradient. */
+  .sk { display: block; position: relative; overflow: hidden; background: var(--sel); border-radius: 6px; max-width: 100%; }
+  .sk::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+               background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--ink) 9%, transparent), transparent);
+               animation: skSweep 1.6s ease-in-out infinite; }
+  .sk.dot-sk { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; }
+  .sk.pill { height: 30px; border-radius: 8px; }
+  @keyframes skSweep { to { transform: translateX(100%); } }
+  .sk-stack { display: grid; gap: 8px; }
+  .sk-row { display: grid; grid-template-columns: 14px 1fr; gap: 4px 8px; align-items: start; padding: 7px 0; border-top: 1px solid var(--rule-soft); }
+  .sk-btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .think { position: relative; height: 20px; margin: 0 0 10px; font-size: 13px; overflow: hidden; }
+  .think.inline { margin: 10px 0 0; }
+  .think > span { position: absolute; left: 0; top: 0; white-space: nowrap; animation: phraseIn .26s ease-out both; }
+  .think > span.leaving { animation: phraseOut .2s ease-in both; }
+  .shim { background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 38%, var(--ink) 50%, var(--muted) 62%, var(--muted) 100%);
+          background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+          animation: shimText 1.8s linear infinite; }
+  .think > span.shim { animation: phraseIn .26s ease-out both, shimText 1.8s linear infinite; }
+  .think > span.shim.leaving { animation: phraseOut .2s ease-in both, shimText 1.8s linear infinite; }
+  @keyframes shimText { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+  @keyframes phraseIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes phraseOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-6px); } }
+  .reveal { animation: revealIn .25s ease-out both; }
+  .fading { opacity: 0; transition: opacity .12s ease-in; }
+  @keyframes revealIn { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .sk::after { animation: none; display: none; }
+    .shim, .think > span.shim, .think > span.shim.leaving { animation: none; background: none; color: var(--muted); -webkit-text-fill-color: currentColor; }
+    .think > span, .think > span.leaving { animation: none; }
+    .reveal { animation: none; } .fading { transition: none; }
+  }
 </style>
 </head>
 <body>
@@ -88,7 +121,62 @@
 const $ = id => document.getElementById(id);
 const esc = MC.esc;
 const STEPS = [["downloading", "Download"], ["verifying", "Verify"], ["awaiting_uac", "Approve"], ["installing", "Install"], ["done", "Done"]];
-let snap = null, confirmState = null, pollTimer = null, watching = null, applied = false;
+let snap = null, confirmState = null, pollTimer = null, watching = null, applied = false, checking = false;
+
+// ---- loading state: skeleton + status phrase ----
+// Phrases come from real probe events / the server's current phase. If nothing arrives for a while (old server, or a slow
+// step) we rotate through generic phrases that only say we are still waiting, never that a step happened.
+const IDLE_PHRASES = ["Still checking devices…", "This can take a few seconds…", "Almost there…"];
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)");
+let loading = false, phrase = "", lastPhraseAt = 0, idleIdx = 0, loadBusy = false, retryTimer = null, skeletonAt = 0;
+const sk = (w, h) => `<i class="sk" style="width:${w};height:${h || 10}px"></i>`;
+const skRows = n => Array.from({ length: n }, () => `<div class="sk-row"><i class="sk dot-sk"></i><div class="sk-stack">${sk("55%", 11)}${sk("78%")}${sk("62%")}</div></div>`).join("");
+
+function setPhrase(text) {
+  if (!text || text === phrase) return;
+  phrase = text; lastPhraseAt = Date.now();
+  const box = $("thinkBox");
+  if (!box) return;
+  for (const old of box.querySelectorAll("span:not(.leaving)")) {
+    if (REDUCED.matches) old.remove();
+    else { old.classList.add("leaving"); setTimeout(() => old.remove(), 220); }
+  }
+  const s = document.createElement("span");
+  s.className = "shim"; s.textContent = text;
+  box.appendChild(s);
+}
+function showSkeleton() {
+  loading = true; phrase = ""; idleIdx = 0; skeletonAt = Date.now();
+  $("pkg").innerHTML = `<h2>Driver package</h2><div class="think" id="thinkBox" role="status" aria-live="polite"></div>
+    <dl class="kv"><dt>${sk("56px")}</dt><dd class="sk-stack">${sk("46%", 12)}${sk("82%")}${sk("60%")}</dd><dt>${sk("44px")}</dt><dd class="sk-stack">${sk("40%", 12)}${sk("70%")}</dd></dl>
+    <div class="status">${sk("9px", 9)}${sk("150px", 12)}</div><div class="sk-btns">${sk("96px", 30).replace('class="sk"', 'class="sk pill"')}${sk("84px", 30).replace('class="sk"', 'class="sk pill"')}${sk("84px", 30).replace('class="sk"', 'class="sk pill"')}${sk("84px", 30).replace('class="sk"', 'class="sk pill"')}</div>`;
+  $("env").innerHTML = `<h2>Environment</h2>${skRows(2)}<h2 style="margin-top:14px">Competing software</h2><div class="sk-stack">${sk("30%")}</div>`;
+  $("devs").innerHTML = `<h2>Devices</h2>${sk("38%", 13)}<div style="height:6px"></div>${skRows(2)}<div style="height:12px"></div>${sk("34%", 13)}<div style="height:6px"></div>${skRows(2)}`;
+  $("last").innerHTML = `<h2>Last action</h2>${sk("26%")}`;
+  setPhrase("Checking your drivers…");
+}
+function enterLoading(label) {
+  if (!loading) showSkeleton();
+  if (label) setPhrase(label);
+}
+// Called when a snapshot is ready: fade the placeholders out, then fade the real content in.
+function leaveLoading() {
+  if (!loading) { render(); return; }
+  loading = false;
+  const secs = ["pkg", "env", "devs", "last"].map($);
+  const finish = () => {
+    secs.forEach(s => s.classList.remove("fading"));
+    render();
+    secs.forEach(s => { s.classList.add("reveal"); setTimeout(() => s.classList.remove("reveal"), 300); });
+  };
+  if (REDUCED.matches || Date.now() - skeletonAt < 300) return finish();   // cached snapshot: no flash of placeholders
+  secs.forEach(s => s.classList.add("fading"));
+  setTimeout(finish, 120);
+}
+setInterval(() => {
+  if (!loading || Date.now() - lastPhraseAt < 2500) return;
+  setPhrase(IDLE_PHRASES[Math.min(idleIdx++, IDLE_PHRASES.length - 1)]);
+}, 500);
 
 const ago = t => {
   const s = Math.max(0, Date.now() / 1000 - t);
@@ -129,11 +217,12 @@ function renderPkg() {
   if (s.dry_run) h += '<p class="hint"><b>Dry run:</b> actions stop before the administrator step and change nothing.</p>';
   const canInstall = rel && rel.installable && !busy;
   const label = !inst ? `Install ${rel ? esc(rel.tag) : ""}` : s.status === "update" ? `Update to ${esc(rel.tag)}` : "Install latest";
+  if (checking) h += '<div class="think inline" role="status" aria-live="polite"><span class="shim">Checking GitHub…</span></div>';
   h += `<div class="btns">
     <button class="primary" data-ask="install" ${canInstall ? "" : "disabled"}>${label}</button>
     <button data-ask="reinstall" ${canInstall && inst ? "" : "disabled"}>Reinstall</button>
     <button class="danger" data-ask="uninstall" ${inst && !busy ? "" : "disabled"}>Uninstall</button>
-    <button data-check ${busy ? "disabled" : ""}>Check now</button></div>`;
+    <button data-check ${busy || checking ? "disabled" : ""}>Check now</button></div>`;
   if (confirmState && !busy) h += confirmHtml();
   h += progressHtml();
   $("pkg").innerHTML = h;
@@ -234,9 +323,21 @@ function render() {
 }
 
 async function load() {
-  const r = await api("/api/drivers");
-  if (r.ok) { snap = r.data; render(); }
-  else $("headnote").textContent = "Could not read driver status";
+  if (loadBusy) return;
+  loadBusy = true;
+  try {
+    const r = await api("/api/drivers");
+    if (r.ok && r.data.loading) {   // new server: first scan still running; show its real phase and ask again shortly
+      if (!snap) enterLoading(r.data.label);
+      clearTimeout(retryTimer); retryTimer = setTimeout(load, 1500);
+    } else if (r.ok) { clearTimeout(retryTimer); snap = r.data; leaveLoading(); }
+    else {
+      $("headnote").textContent = "Could not read driver status";
+      if (loading && !snap) { loading = false; $("pkg").innerHTML = '<h2>Driver package</h2><p class="muted">Could not read driver status.</p>'; ["env", "devs", "last"].forEach(i => $(i).innerHTML = `<h2>${{ env: "Environment", devs: "Devices", last: "Last action" }[i]}</h2>`); }
+    }
+  } catch {
+    $("headnote").textContent = "Could not read driver status";
+  } finally { loadBusy = false; }
 }
 
 // Progress: the shared event stream (if the page chrome provides one) plus polling as the fallback.
@@ -258,7 +359,14 @@ function onAction(a) {
 try {
   if (window.MC && MC.stream) {
     MC.stream.setKinds && MC.stream.setKinds(["action", "driver"]);
-    MC.stream.onEvent && MC.stream.onEvent(e => { if (e && e.type === "driver") onAction({ id: e.actionId, state: e.state, detail: e.detail, log: e.log, kind: snap && snap.action && snap.action.kind }); });
+    MC.stream.onEvent && MC.stream.onEvent(e => {
+      if (!e || e.type !== "driver") return;
+      if (e.probe) {   // scan progress: only matters while the first snapshot is pending
+        if (!loading) return;
+        if (e.probe === "done") { clearTimeout(retryTimer); load(); } else setPhrase(e.label);
+        return;
+      }
+      onAction({ id: e.actionId, state: e.state, detail: e.detail, log: e.log, kind: snap && snap.action && snap.action.kind }); });
   }
 } catch {}
 
@@ -272,10 +380,15 @@ async function start(path, body) {
 document.addEventListener("click", async e => {
   const t = e.target;
   if (t.closest("#checkNow") || t.closest("[data-check]")) {
-    const btn = t.closest("button"); btn.disabled = true;
-    const r = await api("/api/drivers/check", "POST");
-    if (r.ok) { snap = r.data; render(); MC.toast(snap.check_error ? "Check failed: " + snap.check_error : "Release info updated"); }
-    btn.disabled = false; return;
+    const btn = t.closest("button");
+    if (checking || !snap) return;
+    btn.disabled = true; checking = true; renderPkg();
+    let r;
+    try { r = await api("/api/drivers/check", "POST"); } catch { r = { ok: false }; }
+    checking = false; btn.disabled = false;
+    if (r.ok && !r.data.loading) { snap = r.data; render(); MC.toast(snap.check_error ? "Check failed: " + snap.check_error : "Release info updated"); }
+    else { renderPkg(); MC.toast("Could not check for updates"); }
+    return;
   }
   if (t.dataset.ask) { confirmState = { kind: t.dataset.ask }; renderPkg(); return; }
   if (t.dataset.restart) { confirmState = { kind: "restart", id: t.dataset.restart, label: t.dataset.label }; renderPkg(); $("pkg").scrollIntoView({ block: "nearest" }); return; }
@@ -300,6 +413,7 @@ document.addEventListener("click", async e => {
   }
 });
 
+showSkeleton();
 load();
 setInterval(() => { if (!snap || !snap.busy) load(); }, 10000);
 </script>

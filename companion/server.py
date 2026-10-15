@@ -303,6 +303,7 @@ def main():
     hub.capture.start()
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.daemon_threads = True
+    drivers.warm_probe()  # background first driver scan (~7 s) so /drivers is usually ready when opened
     print(f"Magic companion running at http://127.0.0.1:{args.port}  (Ctrl+C to stop)")
     try:
         server.serve_forever()
