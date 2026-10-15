@@ -24,10 +24,12 @@ DRIVER_KEY = DRIVER_KEYS[0]
 
 
 def S(key, group, label, kind, default, backend="companion", unit="", min=None, max=None, step=None, choices=None, help="",
-      depends=None):
-    """depends: (other_key, allowed_values) - the setting only has an effect while other_key is one of allowed_values."""
+      depends=None, device="trackpad"):
+    """depends: (other_key, allowed_values) - the setting only has an effect while other_key is one of allowed_values.
+    device: "trackpad", "keyboard", or "global" (system-wide; shown in the trackpad view but shared by every device)."""
     return {"key": key, "group": group, "label": label, "kind": kind, "default": default, "backend": backend,
-            "unit": unit, "min": min, "max": max, "step": step, "choices": choices, "help": help, "depends": depends}
+            "unit": unit, "min": min, "max": max, "step": step, "choices": choices, "help": help, "depends": depends,
+            "device": device}
 
 
 # Shared by 3-finger and 4-finger swipes.
@@ -133,12 +135,16 @@ SCHEMA = [
     S("tap.maxDuration", "Taps", "Longest tap", "int", 220, unit="ms", min=50, max=600, step=10),
     S("tap.maxMovement", "Taps", "Most finger movement in a tap", "float", 2.5, unit="mm", min=0.5, max=10.0, step=0.1),
     S("native.disableMultiFinger", "Taps", "Turn off Windows' own 3/4-finger gestures", "bool", True,
-      help="Stops Windows and the companion from both acting on the same gesture. Registry change; Windows may need a sign-out to pick it up."),
+      help="Stops Windows and the companion from both acting on the same gesture. Registry change; Windows may need a sign-out to pick it up.",
+      device="global"),
 
     # Pointer
     S("win.cursorSpeed", "Pointer", "Touchpad cursor speed", "int", 10, "windows", "Windows level", 1, 20, 1),
-    S("mouse.swapButtons", "Pointer", "Swap primary/secondary buttons", "bool", False, "windows"),
-    S("win.allowActiveWhenMousePresent", "Pointer", "Keep touchpad on when a mouse is connected", "bool", True, "windows"),
+    S("mouse.swapButtons", "Pointer", "Swap primary/secondary buttons", "bool", False, "windows", device="global"),
+    S("win.allowActiveWhenMousePresent", "Pointer", "Keep touchpad on when a mouse is connected", "bool", True, "windows", device="global"),
+    S("tp.batteryAlert", "Battery", "Low battery alert", "bool", True),
+    S("tp.batteryThreshold", "Battery", "Alert at or below", "int", 20, unit="%", min=5, max=50, step=1,
+      depends=("tp.batteryAlert", [True])),
 
     # Click and driver
     S("driver.ButtonDisabled", "Click (driver)", "Ignore physical click", "bool", False, "driver",
@@ -153,9 +159,23 @@ SCHEMA = [
       help="Driver default is on, which causes stuck fingers and choppy scrolling."),
     S("driver.IgnoreNearFingers", "Click (driver)", "Ignore hovering fingers", "bool", True, "driver"),
     S("driver.PalmRejection", "Click (driver)", "Palm rejection (finger-type based)", "bool", False, "driver"),
+
+    # Magic Keyboard
+    S("kb.batteryAlert", "Battery", "Low battery alert", "bool", True, device="keyboard"),
+    S("kb.batteryThreshold", "Battery", "Alert at or below", "int", 20, unit="%", min=5, max=50, step=1,
+      depends=("kb.batteryAlert", [True]), device="keyboard"),
 ]
 
 BY_KEY = {s["key"]: s for s in SCHEMA}
+DEVICES = ("trackpad", "keyboard")
+STORE_VERSION = 2
+
+
+def schema_for(device):
+    """Specs shown for a device: its own plus the system-wide ones."""
+    if device not in DEVICES:
+        raise ValueError(f"unknown device {device!r}")
+    return [s for s in SCHEMA if s["device"] in (device, "global")]
 WINDOWS_TOUCHPAD_KEYS = {k[4:] for k in BY_KEY if k.startswith("win.")}
 
 
@@ -222,44 +242,122 @@ def driver_registry_values(values):
     }
 
 
+class DeviceView:
+    """get(key) for one device: that device's settings, or the system-wide ones. What the gesture engine reads."""
+
+    def __init__(self, settings, device):
+        self.settings, self.device = settings, device
+
+    def get(self, key):
+        spec = BY_KEY[key]
+        if spec["device"] not in (self.device, "global"):
+            raise KeyError(key)
+        return self.settings.get(key)
+
+
 class Settings:
     def __init__(self):
         self.lock = threading.Lock()
-        self.companion = {s["key"]: s["default"] for s in SCHEMA if s["backend"] == "companion"}
+        # Companion-backed values only; the others live in Windows / the driver registry.
+        self.devices = {d: {s["key"]: s["default"] for s in SCHEMA if s["backend"] == "companion" and s["device"] == d}
+                        for d in DEVICES}
+        self.glob = {s["key"]: s["default"] for s in SCHEMA if s["backend"] == "companion" and s["device"] == "global"}
         self.listeners = []
-        if STORE.exists():
-            saved = json.loads(STORE.read_text(encoding="utf-8"))
-            for key, value in saved.items():
-                if key in self.companion:
-                    try:
-                        self.companion[key] = coerce(BY_KEY[key], value)
-                    except ValueError:
-                        pass
+        self._load()
+
+    def _bucket(self, spec):
+        return self.glob if spec["device"] == "global" else self.devices[spec["device"]]
+
+    def _adopt(self, key, value):
+        spec = BY_KEY.get(key)
+        if spec and spec["backend"] == "companion":
+            try:
+                self._bucket(spec)[key] = coerce(spec, value)
+            except (ValueError, TypeError):
+                pass
+
+    def _load(self):
+        try:
+            raw = STORE.read_text(encoding="utf-8")
+        except OSError:
+            return
+        try:
+            saved = json.loads(raw)
+            if not isinstance(saved, dict):
+                raise ValueError("not an object")
+        except ValueError:
+            return  # corrupt: run on defaults, leave the file for the user to inspect
+        if "version" in saved:
+            devs = saved.get("devices")
+            for dev, vals in (devs.items() if isinstance(devs, dict) else ()):
+                if dev in self.devices and isinstance(vals, dict):
+                    for key, value in vals.items():
+                        if key in self.devices[dev]:
+                            self._adopt(key, value)
+            if isinstance(saved.get("global"), dict):
+                for key, value in saved["global"].items():
+                    if key in self.glob:
+                        self._adopt(key, value)
+            return
+        # v1: one flat dict. Keep a backup, move each key to where its spec lives, rewrite as v2.
+        for key, value in saved.items():
+            self._adopt(key, value)
+        try:
+            STORE.with_name(STORE.name + ".bak").write_text(raw, encoding="utf-8")
+            self._save()
+        except OSError:
+            pass
+
+    def _save(self):
+        data = {"version": STORE_VERSION, "devices": self.devices, "global": self.glob}
+        STORE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def get(self, key):
-        return self.companion[key]
+        spec = BY_KEY[key]
+        if spec["backend"] != "companion":
+            raise KeyError(key)
+        return self._bucket(spec)[key]
 
-    def snapshot(self):
-        """All current values, reading Windows and the driver registry live."""
-        values = dict(self.companion)
+    def view(self, device):
+        if device not in DEVICES:
+            raise ValueError(f"unknown device {device!r}")
+        return DeviceView(self, device)
+
+    @property
+    def companion(self):
+        """Flat merged view of every companion-backed value (read-only convenience)."""
+        merged = dict(self.glob)
+        for vals in self.devices.values():
+            merged.update(vals)
+        return merged
+
+    def snapshot(self, device="trackpad"):
+        """Current values for a device (plus system-wide ones), reading Windows and the driver registry live."""
+        keys = {s["key"] for s in schema_for(device)}
+        values = {k: v for k, v in self.companion.items() if k in keys}
+        values["mouse.swapButtons"] = winapi.get_buttons_swapped()
         tp = winapi.get_touchpad()
         for name in WINDOWS_TOUCHPAD_KEYS:
             values["win." + name] = tp[name]
-        values["mouse.swapButtons"] = winapi.get_buttons_swapped()
-        values.update(read_driver())
-        return values
+        if device == "trackpad":
+            values.update(read_driver())
+        return {k: v for k, v in values.items() if k in keys}
 
-    def update(self, changes):
-        """Apply a dict of changes. Driver settings are returned for the caller to apply elevated."""
+    def update(self, device, changes):
+        """Apply a dict of changes for a device. Driver settings are returned for the caller to apply elevated."""
+        allowed = {s["key"] for s in schema_for(device)}
+        for key in changes:
+            if key not in BY_KEY:
+                raise ValueError(f"unknown setting {key}")
+            if key not in allowed:
+                raise ValueError(f"{key} does not belong to {device}")
         touchpad, driver = {}, {}
         with self.lock:
             for key, value in changes.items():
-                spec = BY_KEY.get(key)
-                if not spec:
-                    raise ValueError(f"unknown setting {key}")
+                spec = BY_KEY[key]
                 value = coerce(spec, value)
                 if spec["backend"] == "companion":
-                    self.companion[key] = value
+                    self._bucket(spec)[key] = value
                 elif key == "mouse.swapButtons":
                     winapi.set_buttons_swapped(value)
                 elif key.startswith("win."):
@@ -268,7 +366,7 @@ class Settings:
                     driver[key] = value
             if touchpad:
                 winapi.set_touchpad(**touchpad)
-            STORE.write_text(json.dumps(self.companion, indent=2), encoding="utf-8")
+            self._save()
         self.apply_side_effects()
         for fn in self.listeners:
             fn()
@@ -276,10 +374,10 @@ class Settings:
 
     def apply_side_effects(self):
         """Keep Windows consistent with companion choices: who scrolls, and whether Windows' own 3/4-finger gestures run."""
-        mode = self.companion["scroll.mode"]
+        mode = self.get("scroll.mode")
         if winapi.get_touchpad()["panEnabled"] != (mode == "windows"):
             winapi.set_touchpad(panEnabled=(mode == "windows"))
-        if self.companion["native.disableMultiFinger"]:
+        if self.get("native.disableMultiFinger"):
             wanted = {name: 0 for name in winapi.NATIVE_MULTI_FINGER}
         else:
             wanted = dict(winapi.NATIVE_DEFAULTS)
@@ -288,5 +386,5 @@ class Settings:
 
     def restore_windows_scrolling(self):
         """Called on exit so the touchpad never stays without scrolling if the companion isn't running."""
-        if self.companion["scroll.mode"] == "companion":
+        if self.get("scroll.mode") == "companion":
             winapi.set_touchpad(panEnabled=True)
