@@ -24,12 +24,13 @@ DRIVER_KEY = DRIVER_KEYS[0]
 
 
 def S(key, group, label, kind, default, backend="companion", unit="", min=None, max=None, step=None, choices=None, help="",
-      depends=None, device="trackpad"):
+      depends=None, device="trackpad", basic=False):
     """depends: (other_key, allowed_values) - the setting only has an effect while other_key is one of allowed_values.
-    device: "trackpad", "keyboard", or "global" (system-wide; shown in the trackpad view but shared by every device)."""
+    device: "trackpad", "keyboard", or "global" (system-wide; shown in the trackpad view but shared by every device).
+    basic: shown by default on the settings page (at most 3 per group and device); the rest sit behind Advanced."""
     return {"key": key, "group": group, "label": label, "kind": kind, "default": default, "backend": backend,
             "unit": unit, "min": min, "max": max, "step": step, "choices": choices, "help": help, "depends": depends,
-            "device": device}
+            "device": device, "basic": basic}
 
 
 # Shared by 3-finger and 4-finger swipes.
@@ -165,6 +166,21 @@ SCHEMA = [
     S("kb.batteryThreshold", "Battery", "Alert at or below", "int", 20, unit="%", min=5, max=50, step=1,
       depends=("kb.batteryAlert", [True]), device="keyboard"),
 ]
+
+# The up-to-3 settings per group (and device) shown before the user turns on Advanced.
+BASIC_KEYS = {
+    "win.tapEnabled", "win.tapAndDragEnabled", "win.sensitivityLevel",
+    "win.twoFingerTapEnabled", "scroll.mode", "win.zoomEnabled",
+    "three.tap", "three.move", "three.swipeUp",
+    "four.tap", "four.swipeSide", "four.swipeUp",
+    "driver.clickForce", "driver.clickHaptic", "driver.ButtonDisabled",
+    "tap.maxDuration", "tap.maxMovement", "native.disableMultiFinger",
+    "win.cursorSpeed", "mouse.swapButtons", "win.allowActiveWhenMousePresent",
+    "tp.batteryAlert", "tp.batteryThreshold", "kb.batteryAlert", "kb.batteryThreshold",
+    "scroll.speed", "scroll.acceleration", "scroll.inertia",
+}
+for _s in SCHEMA:
+    _s["basic"] = _s["key"] in BASIC_KEYS
 
 BY_KEY = {s["key"]: s for s in SCHEMA}
 DEVICES = ("trackpad", "keyboard")

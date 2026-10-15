@@ -199,5 +199,15 @@ a.settings.v["kb.batteryAlert"] = True
 a.check([dev(K, 10)])
 check("enable after already alerted stays quiet until re-arm", len(out) == 1, out)
 
+# ---- basic (default-visible) settings ----
+check("every BASIC key exists", all(k in S.BY_KEY for k in S.BASIC_KEYS))
+for dev_name in S.DEVICES:
+    counts = {}
+    for spec in S.schema_for(dev_name):
+        counts.setdefault(spec["group"], 0)
+        counts[spec["group"]] += 1 if spec["basic"] else 0
+    bad = {g: n for g, n in counts.items() if not 1 <= n <= 3}
+    check(f"{dev_name}: every group has 1-3 basic settings", not bad, bad)
+
 print("\nFAILED: " + ", ".join(failures) if failures else "\nall passed")
 sys.exit(1 if failures else 0)

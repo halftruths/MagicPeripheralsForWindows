@@ -35,6 +35,15 @@
   .group + .group { margin-top: 14px; }
   .group h3 { margin: 0 0 2px; font-size: 13px; }
   .group .hint { margin: 0 0 4px; }
+  details.group > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; padding: 3px 4px; border-radius: 6px; color: var(--ink); }
+  details.group > summary::-webkit-details-marker { display: none; }
+  details.group > summary:hover { background: var(--hover); }
+  details.group > summary:focus-visible { outline: 1px solid var(--rule); }
+  details.group > summary::before { content: ""; width: 6px; height: 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); margin: 0 4px 0 3px; transition: transform .12s; flex: none; }
+  details.group[open] > summary::before { transform: rotate(45deg); }
+  details.group > summary h3 { margin: 0; }
+  details.group .idle-tag { font-size: 12px; color: var(--muted); }
+  details.group > .hint { margin-top: 4px; }
   .drow { display: grid; grid-template-columns: 14px 1fr auto; gap: 4px 8px; padding: 7px 0; border-top: 1px solid var(--rule-soft); align-items: start; }
   .drow .dot { margin-top: 6px; }
   .drow .meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
@@ -158,19 +167,40 @@ function progressHtml() {
   return h + "</div>";
 }
 
+// Per-group expand/collapse: default is expanded when the group has a connected device, collapsed otherwise.
+// A manual toggle is remembered for the session and only dropped when the group's active state changes.
+let groupPrefs = {};
+try { groupPrefs = JSON.parse(sessionStorage.getItem("mc.drivers.groups") || "{}") || {}; } catch {}
+const saveGroupPrefs = () => { try { sessionStorage.setItem("mc.drivers.groups", JSON.stringify(groupPrefs)); } catch {} };
+function groupOpen(g) {
+  const active = !!g.connected, p = groupPrefs[g.id];
+  if (!p || p.active !== active) { groupPrefs[g.id] = { active, open: active }; saveGroupPrefs(); }
+  return groupPrefs[g.id].open;
+}
+const isHarmless = r => r.state === "problem" && r.problem === 10 && /MI_00/.test(r.label);
+const HARMLESS_NOTE = "Harmless, expected — Apple's Device Management interface isn't used on Windows (upstream issue #50)";
+
 function renderDevs() {
   let h = "<h2>Devices</h2>";
   if (!snap.groups.length) h += '<p class="muted">No Magic Trackpad or Keyboard found. Pair or plug one in.</p>';
-  h += snap.groups.map(g => `<div class="group"><h3>${esc(g.title)}</h3><p class="hint">${esc(g.hint)}${g.connected ? "" : " · not connected right now"}</p>` +
+  const groups = snap.groups.filter(g => g.connected).concat(snap.groups.filter(g => !g.connected));   // stable: active first
+  h += groups.map(g => `<details class="group${g.connected ? "" : " idle"}" data-gid="${esc(g.id)}"${groupOpen(g) ? " open" : ""}><summary><h3>${esc(g.title)}</h3>${g.connected ? "" : '<span class="idle-tag">not connected</span>'}</summary><p class="hint">${esc(g.hint)}${g.connected ? "" : " · not connected right now"}</p>` +
     g.rows.map(r => {
-      const cls = { ok: "on", problem: "", warn: "warn", muted: "muted" }[r.state];
+      const harmless = isHarmless(r);
+      const cls = harmless ? "muted" : { ok: "on", problem: "", warn: "warn", muted: "muted" }[r.state];
+      const note = harmless ? HARMLESS_NOTE : r.note;
       const meta = r.present || r.inf ? `<b>${esc(r.inf || "no driver")}</b>${r.service ? ` · ${esc(r.service)}` : ""}${r.version ? ` · ${esc(r.version)}` : ""}` : "";
       const restart = r.present && r.ours && g.id !== "kb-bt" ? `<button class="small" data-restart="${esc(r.instanceId)}" data-label="${esc(g.title.toLowerCase())}: ${esc(r.label)}" ${snap.busy ? "disabled" : ""}>Restart</button>` : "<span></span>";
-      return `<div class="drow"><span class="dot ${cls}"></span><div><div>${esc(r.label)}</div><div class="meta">${meta}</div><div class="meta">${esc(r.note)}</div></div>${restart}</div>`;
-    }).join("") + "</div>").join("");
+      return `<div class="drow"><span class="dot ${cls}"></span><div><div>${esc(r.label)}</div><div class="meta">${meta}</div><div class="meta">${esc(note)}</div></div>${restart}</div>`;
+    }).join("") + "</details>").join("");
   if (snap.probe_error) h += `<p class="hint">Last device scan failed: ${esc(snap.probe_error)}</p>`;
   $("devs").innerHTML = h;
 }
+document.addEventListener("toggle", e => {
+  const d = e.target, id = d.dataset && d.dataset.gid;
+  if (!id || !groupPrefs[id] || groupPrefs[id].open === d.open) return;
+  groupPrefs[id].open = d.open; saveGroupPrefs();
+}, true);
 
 function renderEnv() {
   let h = "<h2>Environment</h2><ul class=\"list\">";

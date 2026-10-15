@@ -87,6 +87,15 @@
   .pagehead h1 .suffix { color: var(--muted); font-weight: 400; }
   .row .tag.sys { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; white-space: nowrap; font-style: normal; }
   .popover .legend span { display: flex; align-items: center; gap: 8px; }
+  button.adv { background: none; border-color: transparent; padding: 3px 10px; font-size: 13px; color: var(--muted); border-radius: 8px; }
+  button.adv:hover { color: var(--ink); background: var(--hover); }
+  button.adv[aria-pressed=true], button.adv[aria-pressed=true]:hover { color: var(--ink); background: var(--sel); }
+  /* Basic view: tiles size to their few rows instead of the fixed Advanced heights. */
+  body.basic .slot { height: auto; }
+  body.basic .slot > .card { position: relative; height: auto; overflow: visible; }
+  body.basic .foot { display: none !important; }
+  button.moreadv { display: block; margin: 6px 0 0 -9px; padding: 2px 9px; border-color: transparent; font-size: 12px; color: var(--muted); border-radius: 999px; }
+  button.moreadv:hover { color: var(--ink); background: var(--sel); }
   .popover label.chk { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 </style>
 </head>
@@ -96,6 +105,7 @@
   <div class="rel keygroup">
     <span class="keynote">* driver restart required</span>
     <button class="chevron" data-pop="morepop" aria-label="More options" aria-expanded="false" aria-haspopup="true"><span class="flag" id="keyflag"></span></button>
+    <button class="adv" id="advBtn" aria-pressed="false" title="Show every setting">Advanced</button>
     <div class="popover" id="morepop">
       <h3>Setting types</h3>
       <p>Settings without a mark apply instantly.</p>
@@ -149,6 +159,21 @@ $("showHelp").onchange = e => {
   layout();
 };
 
+let advanced = (() => { try { return localStorage.getItem("settingsAdvanced") === "1"; } catch { return false; } })();
+function syncAdvanced() {
+  document.body.classList.toggle("basic", !advanced);
+  $("advBtn").setAttribute("aria-pressed", advanced ? "true" : "false");
+}
+function setAdvanced(v) {
+  advanced = v;
+  try { localStorage.setItem("settingsAdvanced", v ? "1" : "0"); } catch {}
+  syncAdvanced();
+  raised = [];
+  render();
+}
+$("advBtn").onclick = () => setAdvanced(!advanced);
+syncAdvanced();
+
 const toast = msg => MC.toast(msg);
 
 function fmt(spec, v) { return spec.kind === "float" ? Number(v).toFixed(spec.step < 1 ? (String(spec.step).split(".")[1] || "").length : 0) : v; }
@@ -162,7 +187,13 @@ function control(spec) {
 }
 
 function cardHtml(g, grid) {
-  const rows = schema.filter(s => s.group === g).map(s => {
+  const all = schema.filter(s => s.group === g);
+  // Basic view: the flagged settings (an old server sends no flags: first 3), plus anything customized or pending.
+  const flagged = schema.some(s => "basic" in s);
+  const isBasic = s => flagged ? s.basic : all.indexOf(s) < 3;
+  const shown = advanced ? all : all.filter(s => isBasic(s) || current(s.key) !== s.default || s.key in pendingDriver);
+  const hiddenN = all.length - shown.length;
+  const rows = shown.map(s => {
     const cur = current(s.key);
     const changed = cur !== s.default;
     const why = active(s) ? "" : ` title="No effect with the current ${schema.find(x => x.key === s.depends[0]).label.toLowerCase()} setting"`;
@@ -175,7 +206,7 @@ function cardHtml(g, grid) {
   const driverBtn = schema.some(s => s.group === g && s.backend === "driver")
     ? `<div class="row"><span class="note">Driver changes need admin approval, then power-cycle the trackpad (button on its side).</span><span></span>
        <button class="primary" data-apply-driver ${Object.keys(pendingDriver).length ? "" : "disabled"}>Apply driver settings</button></div>` : "";
-  return `<div class="slot" data-g="${g}"><section class="card"><div class="chead"><h2>${g}</h2><button class="collapse" data-collapse title="Collapse (Esc)">Collapse</button></div>${GROUP_NOTES[g] ? `<p class="sub">${GROUP_NOTES[g]}</p>` : ""}<div class="rows${grid ? " grid" : ""}">${rows}</div>${driverBtn}<div class="foot"><button data-showall>Show all</button></div></section></div>`;
+  return `<div class="slot" data-g="${g}"><section class="card"><div class="chead"><h2>${g}</h2><button class="collapse" data-collapse title="Collapse (Esc)">Collapse</button></div>${GROUP_NOTES[g] ? `<p class="sub">${GROUP_NOTES[g]}</p>` : ""}<div class="rows${grid ? " grid" : ""}">${rows}</div>${hiddenN ? `<button class="moreadv" data-adv>+${hiddenN} more in Advanced</button>` : ""}${driverBtn}<div class="foot"><button data-showall>Show all</button></div></section></div>`;
 }
 
 function render() {
@@ -295,6 +326,7 @@ function readControl(el) {
 
 $("main").addEventListener("change", e => { if (e.target.dataset.key) save(e.target.dataset.key, readControl(e.target)); });
 $("main").addEventListener("click", async e => {
+  if (e.target.closest("[data-adv]")) return setAdvanced(true);
   const key = e.target.dataset.reset;
   if (key) return save(key, schema.find(s => s.key === key).default);
   if ("applyDriver" in e.target.dataset) {
